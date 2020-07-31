@@ -1,12 +1,17 @@
+manager:
+  ip: 127.0.0.1
+  port: 0
+
 agents:
-  manager_address: 127.0.0.1
   os1_lidar:
-    local_port: 30001
-    output_file_name: lidar.bin
-    hw_connection_retries: 5
+    enabled: true
+    ip: 127.0.0.1
+    port: 30001
   os1_imu:
-    local_port: 30002
-    output_file_name: imu_lidar.csv
+    enabled: true
+    ip: 127.0.0.1
+    port: 30002
+
 logging:
   version: 1
   disable_existing_loggers: true
@@ -18,7 +23,7 @@ logging:
       class: logging.handlers.TimedRotatingFileHandler
       level: DEBUG
       formatter: simple
-      filename: logs/test.log
+      filename: logs/manager.log
       when: midnight
       interval: 1
       backupCount: 7

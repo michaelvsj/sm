@@ -94,19 +94,19 @@ class AbstractHWAgent(ABC):
         self.output_file = None
 
     def set_up(self):
-        self._configure()  # Los parámetros de comunicación los lee de la config también
+        self.__configure()  # Los parámetros de comunicación los lee de la config también
         self.sock.bind((TCP_IP, self.local_tcp_port))
         self.sock.listen(1)
         self.sock.setblocking(True)
         self.__manager_connect()
-        if self._hw_connect_insist():
+        if self.__hw_connect_insist():
             self.state = AgentStatus.STAND_BY
         else:
             self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
                               f"Terminando proceso")
             sys.exit(1)
 
-    def _hw_connect_insist(self):
+    def __hw_connect_insist(self):
         attempts = 0
         while attempts < self.hw_connections_retries:
             if self.hw_connect():
@@ -116,14 +116,15 @@ class AbstractHWAgent(ABC):
                 attempts += 1
         return False
 
-    def _configure(self):
+    def __configure(self):
         self.config = yaml.load(open(self.config_file).read(), Loader=yaml.FullLoader)
-        logging.config.dictConfig(self.config['logging'])
-        self.manager_address = self.config["manager_address"]
+        logging.config.dictConfig(self.config["logging"])
+        self.manager_address = self.config["manager_ip"]
         self.manager_port = self.config["manager_port"]
         self.local_tcp_port = self.config["local_port"]
         self.output_file_name = self.config["output_file_name"]
         self.hw_connections_retries = self.config["hw_connection_retries"]
+        self.hw_config()
 
     def run(self):
         self.logger.info("Iniciando thread de comunicación con manager")
@@ -212,6 +213,14 @@ class AbstractHWAgent(ABC):
 
     def __manager_send(self, msg):
         self.connection.sendall(msg)
+
+    @abstractmethod
+    def hw_config(self):
+        """
+        Lee la config específica de hw del agente
+        :return:
+        """
+        pass
 
     @abstractmethod
     def hw_run_data_threads(self):

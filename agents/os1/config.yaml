@@ -1,0 +1,43 @@
+manager_ip: 127.0.0.1
+manager_port: 0
+local_port: 30001
+output_file_name: lidar.bin
+hw_connection_retries: 5
+lidar_ip: 10.1.9.200 #IP del lidar
+host_ip: 10.1.9.225 #Ip de la interfaz de red donde se conecta el lidar
+
+logging:
+  version: 1
+  disable_existing_loggers: False
+  formatters:
+      simple:
+          format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+      os1_lidar_handler:
+        class: logging.handlers.TimedRotatingFileHandler
+        level: DEBUG
+        formatter: simple
+        filename: logs/os1_lidar.log
+        when: midnight
+        interval: 1
+        backupCount: 7
+        encoding: utf-8
+      os1_imu_handler:
+        class: logging.handlers.TimedRotatingFileHandler
+        level: INFO
+        formatter: simple
+        filename: logs/os1_imu.log
+        when: midnight
+        interval: 1
+        backupCount: 7
+        encoding: utf-8
+      root_handler:
+        class : logging.NullHandler
+  loggers:
+      os1_lidar:
+        handlers: [os1_lidar_handler]
+      os1_imu:
+        handlers: [os1_imu_handler]
+  root:
+      level: DEBUG
+      handlers: [root_handler]

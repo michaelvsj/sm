@@ -4,6 +4,8 @@ from pathlib import Path
 
 from hwagent.abstract_agent import AgentStatus, Message, HWStatus
 
+Path('logs').mkdir(exist_ok=True)
+
 agent_address = ('127.0.0.1', 30001)
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.setblocking(True)
