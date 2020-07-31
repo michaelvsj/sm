@@ -150,14 +150,16 @@ class AbstractHWAgent(ABC):
         while not self.flag_quit.is_set():
             if self.state == AgentStatus.CAPTURING \
                     and self.output_file is not None \
-                    and self.output_file.writable() \
-                    and len(self.dq_formatted_data):
-                self.output_file.write(self.dq_formatted_data.pop())
+                    and len(self.dq_formatted_data) \
+                    and not self.output_file.closed:
+                try:
+                    self.output_file.write(self.dq_formatted_data.pop())
+                except ValueError:  # Archivo se cerró entremedio
+                    pass
 
     def __manager_connect(self):
         self.logger.info("Esperando conexión de manager")
         connected = False
-        self.__sock.settimeout(60)
         while not connected:
             try:
                 self.connection, client_address = self.__sock.accept()
@@ -165,7 +167,6 @@ class AbstractHWAgent(ABC):
             except socket.timeout:
                 self.logger.info("Timeout esperando conexión de manager. Sigo esperando.")
                 pass
-        self.__sock.settimeout(0.1)
         self.logger.info("Manager conectado")
         self.state = AgentStatus.STAND_BY
 
@@ -178,8 +179,8 @@ class AbstractHWAgent(ABC):
             try:
                 cmd = self.connection.recv(MGR_COMM_BUFFER)
                 if not cmd:  # Se cerró la conexion
-                    self.logger.warning("Conexión cerrada por manager")
-                    self.__manager_connect() # Intenta reconexión
+                    self.logger.warning(f"Conexión cerrada por manager")
+                    self.__manager_connect()  # Intenta reconexión
                 else:
                     self.dq_from_mgr.appendleft(cmd)
             except TimeoutError:

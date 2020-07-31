@@ -28,11 +28,15 @@ while not agent_ready:
     else:
         time.sleep(0.1)
 
-dir = '/home/mich/temp/capture/002'
-Path(dir).mkdir(parents=True, exist_ok=True)
-sock.sendall(Message(Message.SET_FOLDER, dir).serialize())
+_dir = f'/home/mich/temp/capture/000'
+Path(_dir).mkdir(parents=True, exist_ok=True)
+sock.send(Message(Message.SET_FOLDER, _dir).serialize())
+sock.send(Message(Message.START_CAPTURE).serialize())
+for i in range(1, 3):
+    time.sleep(3)
+    _dir = f'/home/mich/temp/capture/{i:03d}'
+    Path(_dir).mkdir(parents=True, exist_ok=True)
+    sock.send(Message(Message.SET_FOLDER, _dir).serialize())
 
-sock.sendall(Message(Message.START_CAPTURE).serialize())
-time.sleep(5)
 sock.sendall(Message(Message.END_CAPTURE).serialize())
-
+time.sleep(2)

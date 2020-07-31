@@ -165,12 +165,12 @@ class LidarAgent(AbstractHWAgent):
         received_packets = num_packets.sum()
         lost_packets_pc = 100 * (expected_packets - received_packets) / expected_packets
         lost_packets_pc = max(0, lost_packets_pc)
-        self.logger.debug(f"Paquetes: recibidos: {received_packets}, perdidos: {lost_packets_pc} %")
+        self.logger.info(f"Paquetes: recibidos: {received_packets}, perdidos: {lost_packets_pc:.1f} %")
 
         blocks_total = self.blocks_valid + self.blocks_invalid
         blocks_invalid_pc = self.blocks_invalid / blocks_total * 100
         if blocks_total > 0:
-            self.logger.debug(f"Bloques de azimuth. "
+            self.logger.info(f"Bloques de azimuth. "
                               f"Validos: {self.blocks_valid} ({100 - blocks_invalid_pc:.1f} %). "
                               f"Invalidos: {self.blocks_invalid} ({blocks_invalid_pc:.1f} %)")
 

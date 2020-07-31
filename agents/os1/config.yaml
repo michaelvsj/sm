@@ -8,7 +8,7 @@ host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 
 logging:
   version: 1
-  disable_existing_loggers: False
+  disable_existing_loggers: True
   formatters:
       simple:
           format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -24,7 +24,7 @@ logging:
         encoding: utf-8
       os1_imu_handler:
         class: logging.handlers.TimedRotatingFileHandler
-        level: INFO
+        level: DEBUG
         formatter: simple
         filename: logs/os1_imu.log
         when: midnight
