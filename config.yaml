@@ -1,0 +1,28 @@
+agents:
+  manager_address: 127.0.0.1
+  os1_lidar:
+    local_port: 30001
+    output_file_name: lidar.bin
+    hw_connection_retries: 5
+  os1_imu:
+    local_port: 30002
+    output_file_name: imu_lidar.csv
+logging:
+  version: 1
+  disable_existing_loggers: true
+  formatters:
+    simple:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    root_handler:
+      class: logging.handlers.TimedRotatingFileHandler
+      level: DEBUG
+      formatter: simple
+      filename: logs/test.log
+      when: midnight
+      interval: 1
+      backupCount: 7
+      encoding: utf-8
+  root:
+    level: DEBUG
+    handlers: [root_handler]
