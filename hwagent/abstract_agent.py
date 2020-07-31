@@ -126,6 +126,49 @@ class AbstractHWAgent(ABC):
         self.hw_connections_retries = self.config["hw_connection_retries"]
         self.hw_config()
 
+    def __update_capture_file(self, new_file_path):
+        self.logger.info(f"Cambio de directorio a {new_file_path}")
+        self.pre_capture_file_update()
+        if self.output_file_is_binary is None:
+            self.logger.error("Error. Atributo self.output_file_is_binary debe ser True o False")
+            print("Error. Atributo self.output_file_is_binary debe ser True o False")
+            return
+        if self.output_file is not None:
+            self.output_file.flush()
+            self.output_file.close()
+        write_mode = 'wb' if self.output_file_is_binary else 'w'
+        self.output_file = open(path.join(new_file_path, self.output_file_name), write_mode)
+        if self.output_file_header:
+            self.output_file.write(self.output_file_header)
+
+    def __file_writer(self):
+        while not self.flag_quit.is_set():
+            if self.state == AgentStatus.CAPTURING and self.output_file is not None and self.output_file.writable():
+                self.output_file.write(self.dq_formatted_data.pop())
+
+    def __manager_connect(self):
+        self.logger.info("Esperando conexión de manager")
+        self.connection, client_address = self.sock.accept()
+        self.logger.info("Manager conectado")
+        self.state = AgentStatus.STAND_BY
+
+    def __manager_recv(self):
+        """
+        Este método debe recibir, parsear y colocar las instrucciones desde el manager en un deque para ser leido desde el bucle principal
+        :return:
+        """
+        while not self.flag_quit.is_set():
+            cmd = self.connection.recv(MGR_COMM_BUFFER)
+            if not cmd:  # Se cerró la conexion
+                self.logger.warning("Conexión cerrada por manager")
+                self.__manager_connect() # Intenta reconexión
+            else:
+                self.dq_from_mgr.appendleft(cmd)
+        self.connection.close()
+
+    def __manager_send(self, msg):
+        self.connection.sendall(msg)
+
     def run(self):
         self.logger.info("Iniciando thread de comunicación con manager")
         mgr_comm = Thread(target=self.__manager_recv)
@@ -170,49 +213,16 @@ class AbstractHWAgent(ABC):
             self.logger.exception("")
         finally:
             self.logger.info("Terminando aplicación")
-            self.hw_stop_data_threads()
+            self.hw_finalize()
 
-    def __update_capture_file(self, new_file_path):
-        self.logger.info(f"Cambio de directorio a {new_file_path}")
-        if self.output_file_is_binary is None:
-            self.logger.error("Error. Atributo self.output_file_is_binary debe ser True o False")
-            print("Error. Atributo self.output_file_is_binary debe ser True o False")
-            return
-        if self.output_file is not None:
-            self.output_file.flush()
-            self.output_file.close()
-        write_mode = 'wb' if self.output_file_is_binary else 'w'
-        self.output_file = open(path.join(new_file_path, self.output_file_name), write_mode)
-        if self.output_file_header:
-            self.output_file.write(self.output_file_header)
-
-    def __file_writer(self):
-        while not self.flag_quit.is_set():
-            if self.state == AgentStatus.CAPTURING and self.output_file is not None and self.output_file.writable():
-                self.output_file.write(self.dq_formatted_data.pop())
-
-    def __manager_connect(self):
-        self.logger.info("Esperando conexión de manager")
-        self.connection, client_address = self.sock.accept()
-        self.logger.info("Manager conectado")
-        self.state = AgentStatus.STAND_BY
-
-    def __manager_recv(self):
+    @abstractmethod
+    def pre_capture_file_update(self):
         """
-        Este método debe recibir, parsear y colocar las instrucciones desde el manager en un deque para ser leido desde el bucle principal
+        Poner aquí codigo que se ejecute justo antes de actualizar el archivo de captura.
+        Por ejemplo, enviar al manager estadísticas de la captura en el archivo actual
         :return:
         """
-        while not self.flag_quit.is_set():
-            cmd = self.connection.recv(MGR_COMM_BUFFER)
-            if not cmd:  # Se cerró la conexion
-                self.logger.warning("Conexión cerrada por manager")
-                self.__manager_connect() # Intenta reconexión
-            else:
-                self.dq_from_mgr.appendleft(cmd)
-        self.connection.close()
-
-    def __manager_send(self, msg):
-        self.connection.sendall(msg)
+        pass
 
     @abstractmethod
     def hw_config(self):
@@ -231,7 +241,7 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def hw_stop_data_threads(self):
+    def hw_finalize(self):
         """
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:

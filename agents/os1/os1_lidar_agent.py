@@ -22,7 +22,7 @@ LOST_PACKETS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de paquetes perdidos, 
 INVALID_BLOCKS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de bloques inválidos, se pasa a estado de error o warning
 
 
-class TestAgent(AbstractHWAgent):
+class LidarAgent(AbstractHWAgent):
     def __init__(self):
         AbstractHWAgent.__init__(self, CONFIG_FILE)
         self.output_file_is_binary = True
@@ -33,6 +33,7 @@ class TestAgent(AbstractHWAgent):
         self.packets_per_frame = dict()
         self.blocks_valid = 0
         self.blocks_invalid = 0
+        self.active_channels = ()
 
     def hw_config(self):
         """
@@ -50,12 +51,18 @@ class TestAgent(AbstractHWAgent):
         self.lidar_receiver = Thread(target=self.read_from_lidar)
         self.lidar_receiver.start()
 
-    def hw_stop_data_threads(self):
+    def hw_finalize(self):
         """
+        Se prepara para terminar el agente
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.lidar_receiver.join()
+        try:
+            assert(self.flag_quit.is_set()) # Este flag debiera estar seteado en este punto
+        except AssertionError:
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+        self.lidar_receiver.join(1)
+        self.sock.close()
 
     def hw_start_streaming(self):
         """
@@ -89,6 +96,7 @@ class TestAgent(AbstractHWAgent):
         beam_az_angles = beam_intrinsics['beam_azimuth_angles']
         self.logger.info("Construyendo tabla trigonométrica")
         build_trig_table(beam_alt_angles, beam_az_angles)
+        self.active_channels = tuple(idx for idx, val in enumerate(beam_alt_angles) if val != 0)
         self.os1.start()
         time.sleep(20)  # TODO: consultar estado hasta que sea "running"
         return True
@@ -132,7 +140,7 @@ class TestAgent(AbstractHWAgent):
                     #   o bien hacer un override del método de escritura: __file_writer
                     pass
 
-    def check_packet_statistics(self):
+    def pre_capture_file_update(self):
         frames = np.array(list(self.packets_per_frame.keys()))
         num_packets = np.array(list(self.packets_per_frame.values()))
         self.packets_per_frame = dict()
@@ -147,9 +155,9 @@ class TestAgent(AbstractHWAgent):
 
         expected_packets = num_frames * (1 + round(AZIMUTH_DIVS * ANGLE_SPAN / 360 / 16))
         received_packets = num_packets.sum()
-        lost_packets = 100 * (expected_packets - received_packets) / expected_packets
-        lost_packets = max(0, lost_packets)
-        self.logger.debug(f"Paq. recibidos: {received_packets}. Perdidos: {lost_packets} %")
+        lost_packets_pc = 100 * (expected_packets - received_packets) / expected_packets
+        lost_packets_pc = max(0, lost_packets_pc)
+        self.logger.debug(f"Paquetes: recibidos: {received_packets}, perdidos: {lost_packets_pc} %")
 
         blocks_total = self.blocks_valid + self.blocks_invalid
         blocks_invalid_pc = self.blocks_invalid / blocks_total * 100
@@ -158,18 +166,21 @@ class TestAgent(AbstractHWAgent):
                               f"Validos: {self.blocks_valid} ({100 - blocks_invalid_pc:.1f} %). "
                               f"Invalidos: {self.blocks_invalid} ({blocks_invalid_pc:.1f} %)")
 
-        # TODO: enviar al manager : (received_packets, lost_packets, blocks_total, blocks_valid))
+        # TODO: Considerar enviar al manager las estadísticas:
+        #  (received_packets, lost_packets_pc, blocks_total, blocks_valid))
+        #  Aunque igual se pueden ver en el log...
 
         self.blocks_valid, self.blocks_invalid = 0, 0
 
-        if lost_packets > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
+        if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
             self.hw_state = HWStatus.WARNING
         else:
             self.hw_state = HWStatus.NOMINAL
 
 
 if __name__ == "__main__":
-    agent = TestAgent()
+    Path('logs').mkdir(exist_ok=True)
+    agent = LidarAgent()
     try:
         agent.set_up()
         agent.run()

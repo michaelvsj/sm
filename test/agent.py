@@ -18,7 +18,7 @@ class TestAgent(AbstractHWAgent):
         """
         pass
 
-    def hw_stop_data_threads(self):
+    def hw_finalize(self):
         """
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
