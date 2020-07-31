@@ -78,6 +78,7 @@ class LidarAgent(AbstractHWAgent):
         Detiene el stream de datos desde el sensor
         """
         self.receive_data.clear()
+        self.packets_per_frame = dict()  # resetea datos de estadística
         pass
 
     def hw_connect(self):
@@ -130,6 +131,7 @@ class LidarAgent(AbstractHWAgent):
                 # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
                 if first_measurement_id >= ADMIT_MEAS_ID_MORE_THAN and first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
                     # Recopilación de datos para estadística de paquetes
+                    #self.writing_allowed.set() # TODO chequear la utilidad de esto en el PC onboard
                     frame_id = int.from_bytes(packet[10:12], byteorder="little")
                     try:
                         self.packets_per_frame[frame_id] += 1
@@ -146,12 +148,13 @@ class LidarAgent(AbstractHWAgent):
                     #  TODO: setear un flag que autorice la escritura a disco.
                     #   Esto debe implementarse en la clase abastracta también
                     #   o bien hacer un override del método de escritura: __file_writer
+                    #self.writing_allowed.clear() # TODO chequear la utilidad de esto en el PC onboard
                     pass
 
     def pre_capture_file_update(self):
         frames = np.array(list(self.packets_per_frame.keys()))
         num_packets = np.array(list(self.packets_per_frame.values()))
-        self.packets_per_frame = dict()
+        self.packets_per_frame = dict()     # resetea datos
         if len(num_packets) == 0:
             self.logger.warning("No se recibieron paquetes desde el LiDAR")
             return

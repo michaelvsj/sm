@@ -30,13 +30,28 @@ while not agent_ready:
 
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
-sock.send(Message(Message.SET_FOLDER, _dir).serialize())
-sock.send(Message(Message.START_CAPTURE).serialize())
-for i in range(1, 3):
+sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
+sock.sendall(Message(Message.START_CAPTURE).serialize())
+for i in range(1, 5):
     time.sleep(3)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)
-    sock.send(Message(Message.SET_FOLDER, _dir).serialize())
+    sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
 
+time.sleep(3)
+sock.sendall(Message(Message.END_CAPTURE).serialize())
+time.sleep(10)
+
+_dir = f'/home/mich/temp/capture/000'
+Path(_dir).mkdir(parents=True, exist_ok=True)
+sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
+sock.sendall(Message(Message.START_CAPTURE).serialize())
+for i in range(1, 5):
+    time.sleep(3)
+    _dir = f'/home/mich/temp/capture/{i:03d}'
+    Path(_dir).mkdir(parents=True, exist_ok=True)
+    sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
+
+time.sleep(3)
 sock.sendall(Message(Message.END_CAPTURE).serialize())
 time.sleep(2)
