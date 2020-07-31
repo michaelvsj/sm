@@ -73,7 +73,7 @@ class HWStatus:
 
 class AbstractHWAgent(ABC):
     def __init__(self, config_file):
-        self.logger = logging.getLogger()  # TODO Puedo configurarlo a posteriori?????????????
+        self.logger = logging.getLogger()
         self.output_file_name = ''
         self.state = AgentStatus.STARTING
         self.hw_state = HWStatus.NOT_CONNECTED
@@ -84,7 +84,7 @@ class AbstractHWAgent(ABC):
         self.flag_quit = Event()    #Bandera para avisar que hay que terminar el programa
         self.dq_from_mgr = deque()  #deque con los comandos provenientes del manager
         self.dq_formatted_data = deque() #Deque que contiene la data formateada lista para escribir a disco
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.local_tcp_port = ''
         self.manager_port = ''
         self.connection = None
@@ -95,9 +95,14 @@ class AbstractHWAgent(ABC):
 
     def set_up(self):
         self.__configure()  # Los parámetros de comunicación los lee de la config también
-        self.sock.bind((TCP_IP, self.local_tcp_port))
-        self.sock.listen(1)
-        self.sock.setblocking(True)
+        self.logger.info("Aplicación configurada e iniciando")
+        try:
+            self.__sock.bind((TCP_IP, self.local_tcp_port))
+        except OSError:
+            self.logger.exception("")
+            sys.exit(1)
+        self.__sock.listen(1)
+        self.__sock.setblocking(True)
         self.__manager_connect()
         if self.__hw_connect_insist():
             self.state = AgentStatus.STAND_BY
@@ -143,12 +148,24 @@ class AbstractHWAgent(ABC):
 
     def __file_writer(self):
         while not self.flag_quit.is_set():
-            if self.state == AgentStatus.CAPTURING and self.output_file is not None and self.output_file.writable():
+            if self.state == AgentStatus.CAPTURING \
+                    and self.output_file is not None \
+                    and self.output_file.writable() \
+                    and len(self.dq_formatted_data):
                 self.output_file.write(self.dq_formatted_data.pop())
 
     def __manager_connect(self):
         self.logger.info("Esperando conexión de manager")
-        self.connection, client_address = self.sock.accept()
+        connected = False
+        self.__sock.settimeout(60)
+        while not connected:
+            try:
+                self.connection, client_address = self.__sock.accept()
+                connected = True
+            except socket.timeout:
+                self.logger.info("Timeout esperando conexión de manager. Sigo esperando.")
+                pass
+        self.__sock.settimeout(0.1)
         self.logger.info("Manager conectado")
         self.state = AgentStatus.STAND_BY
 
@@ -158,12 +175,16 @@ class AbstractHWAgent(ABC):
         :return:
         """
         while not self.flag_quit.is_set():
-            cmd = self.connection.recv(MGR_COMM_BUFFER)
-            if not cmd:  # Se cerró la conexion
-                self.logger.warning("Conexión cerrada por manager")
-                self.__manager_connect() # Intenta reconexión
-            else:
-                self.dq_from_mgr.appendleft(cmd)
+            try:
+                cmd = self.connection.recv(MGR_COMM_BUFFER)
+                if not cmd:  # Se cerró la conexion
+                    self.logger.warning("Conexión cerrada por manager")
+                    self.__manager_connect() # Intenta reconexión
+                else:
+                    self.dq_from_mgr.appendleft(cmd)
+            except TimeoutError:
+                pass
+        self.logger.info("Terminando bucle __manager_recv")
         self.connection.close()
 
     def __manager_send(self, msg):
@@ -213,7 +234,11 @@ class AbstractHWAgent(ABC):
             self.logger.exception("")
         finally:
             self.logger.info("Terminando aplicación")
+            self.flag_quit.set()
+            mgr_comm.join(0.5)
+            wrt.join(0.5)
             self.hw_finalize()
+            self.logger.info("Aplicación terminada")
 
     @abstractmethod
     def pre_capture_file_update(self):

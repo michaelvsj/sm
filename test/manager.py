@@ -1,7 +1,7 @@
 import socket
 import time
 from pathlib import Path
-
+import yaml
 from hwagent.abstract_agent import AgentStatus, Message, HWStatus
 
 Path('logs').mkdir(exist_ok=True)
@@ -18,15 +18,21 @@ while not connected:
     except ConnectionRefusedError:
         time.sleep(0.1)
 
-dir = '\\mnt\\data\\capture\\002'
-Path(dir).mkdir(exist_ok=True)
-try:
-    while True:
-        sock.sendall(Message(Message.QUERY_AGENT_STATE).serialize())
-        print(sock.recv(1024).decode('ascii'))
-        time.sleep(1)
-        sock.sendall(Message(Message.SET_FOLDER, dir).serialize())
-except KeyboardInterrupt:
-    pass
-except Exception as e:
-    print(str(e))
+
+agent_ready = False
+while not agent_ready:
+    sock.sendall(Message(Message.QUERY_AGENT_STATE).serialize())
+    rep = yaml.safe_load(sock.recv(1024).decode('ascii'))
+    if rep['arg'] == AgentStatus.STAND_BY:
+        agent_ready = True
+    else:
+        time.sleep(0.1)
+
+dir = '/home/mich/temp/capture/002'
+Path(dir).mkdir(parents=True, exist_ok=True)
+sock.sendall(Message(Message.SET_FOLDER, dir).serialize())
+
+sock.sendall(Message(Message.START_CAPTURE).serialize())
+time.sleep(5)
+sock.sendall(Message(Message.END_CAPTURE).serialize())
+

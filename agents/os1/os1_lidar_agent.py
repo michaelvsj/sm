@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import socket
 import time
@@ -25,6 +26,7 @@ INVALID_BLOCKS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de bloques inválido
 class LidarAgent(AbstractHWAgent):
     def __init__(self):
         AbstractHWAgent.__init__(self, CONFIG_FILE)
+        self.logger = logging.getLogger('os1_lidar')
         self.output_file_is_binary = True
         self.lidar_ip = ""
         self.host_ip = ""
@@ -82,8 +84,13 @@ class LidarAgent(AbstractHWAgent):
         self.receive_data.clear()
 
         # Socket para recibir datos desde LiDAR
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind((self.lidar_ip, LIDAR_UDP_PORT))
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        try:
+            self.sock.bind((self.host_ip, LIDAR_UDP_PORT))
+        except OSError:
+            self.logger.exception("")
+            return False
 
         self.os1 = OS1(self.lidar_ip, self.host_ip, mode="512x10")
         self.logger.info("Cargando parmámetros desde LiDAR ('beam intrinsics')")
@@ -112,7 +119,8 @@ class LidarAgent(AbstractHWAgent):
             packet, address = self.sock.recvfrom(buffer_size)
             if not self.receive_data.is_set():
                 continue
-            if address == self.lidar_ip and len(packet) == PACKET_SIZE:
+            if address[0] == self.lidar_ip and len(packet) == PACKET_SIZE:
+                #print(f"receive_data: {self.receive_data.is_set()}, address: {address}, packet_len: {len(packet)}")
                 # ignora los 64 primeos paquetes(equivalente a 2 frames. Número arbitrario), que pueden ser de un buffer de captura previa
                 # TODO: Verificar que sea necesario
                 if start_counter < 64:

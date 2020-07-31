@@ -3,8 +3,8 @@ manager_port: 0
 local_port: 30001
 output_file_name: lidar.bin
 hw_connection_retries: 5
-lidar_ip: 10.1.9.200 #IP del lidar
-host_ip: 10.1.9.225 #Ip de la interfaz de red donde se conecta el lidar
+lidar_ip: 192.168.0.20 #IP del lidar
+host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 
 logging:
   version: 1
