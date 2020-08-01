@@ -96,27 +96,30 @@ class AbstractHWAgent(ABC):
         self.writing_allowed.set() # Por defecto, se permite escritura
 
     def set_up(self):
-        self.__configure()  # Los parámetros de comunicación los lee de la config también
-        self.logger.info("Aplicación configurada e iniciando")
         try:
-            self.__sock.bind((TCP_IP, self.local_tcp_port))
-        except OSError:
-            self.logger.exception("")
-            sys.exit(1)
-        self.__sock.listen(1)
-        self.__sock.setblocking(True)
-        self.__manager_connect()
-        if self.__hw_connect_insist():
-            self.state = AgentStatus.STAND_BY
-        else:
-            self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
-                              f"Terminando proceso")
-            sys.exit(1)
+            self.__configure()  # Los parámetros de comunicación los lee de la config también
+            self.logger.info("Aplicación configurada e iniciando")
+            try:
+                self.__sock.bind((TCP_IP, self.local_tcp_port))
+            except OSError:
+                self.logger.exception("")
+                sys.exit(1)
+            self.__sock.listen(1)
+            self.__sock.setblocking(True)
+            self.__manager_connect()
+            if self.__hw_connect_insist():
+                self.state = AgentStatus.STAND_BY
+            else:
+                self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
+                                  f"Terminando proceso")
+                sys.exit(1)
+        except KeyboardInterrupt:
+            sys.exit(0)
 
     def __hw_connect_insist(self):
         attempts = 0
         while attempts < self.hw_connections_retries:
-            if self.hw_connect():
+            if self._hw_connect():
                 self.hw_state = HWStatus.NOMINAL
                 return True
             else:
@@ -131,11 +134,11 @@ class AbstractHWAgent(ABC):
         self.local_tcp_port = self.config["local_port"]
         self.output_file_name = self.config["output_file_name"]
         self.hw_connections_retries = self.config["hw_connection_retries"]
-        self.hw_config()
+        self._hw_config()
 
     def __update_capture_file(self, new_file_path):
         self.logger.info(f"Cambio de directorio a {new_file_path}")
-        self.pre_capture_file_update()
+        self._pre_capture_file_update()
         if self.output_file_is_binary is None:
             self.logger.error("Error. Atributo self.output_file_is_binary debe ser True o False")
             print("Error. Atributo self.output_file_is_binary debe ser True o False")
@@ -151,7 +154,6 @@ class AbstractHWAgent(ABC):
     def __file_writer(self):
         while not self.flag_quit.is_set():
             if not not self.writing_allowed.is_set():
-                time.sleep(0.001)
                 continue
             if self.state == AgentStatus.CAPTURING \
                     and self.output_file is not None \
@@ -161,17 +163,21 @@ class AbstractHWAgent(ABC):
                     self.output_file.write(self.dq_formatted_data.popleft())
                 except ValueError:  # Archivo se cerró entremedio
                     pass
+            else:
+                time.sleep(0.01)
 
     def __manager_connect(self):
         self.logger.info("Esperando conexión de manager")
         connected = False
-        while not connected:
+        while not connected and not self.flag_quit.is_set():
             try:
                 self.connection, client_address = self.__sock.accept()
                 connected = True
             except socket.timeout:
                 self.logger.info("Timeout esperando conexión de manager. Sigo esperando.")
                 pass
+            except KeyboardInterrupt:
+                raise
         self.logger.info("Manager conectado")
         self.state = AgentStatus.STAND_BY
 
@@ -198,24 +204,25 @@ class AbstractHWAgent(ABC):
 
     def run(self):
         self.logger.info("Iniciando thread de comunicación con manager")
-        mgr_comm = Thread(target=self.__manager_recv)
+        mgr_comm = Thread(target=self.__manager_recv, daemon=True)
         mgr_comm.start()
         self.logger.info("Iniciando thread de escritura a disco")
         wrt = Thread(target=self.__file_writer)
         wrt.start()
         self.logger.info("Iniciando threads de manejo de datos de hardware")
-        self.hw_run_data_threads()
+        self._hw_run_data_threads()
         self.logger.info("Iniciando bucle principal")
         try:
             while True:
+                time.sleep(0.01)
                 if len(self.dq_from_mgr):
                     msg = Message.from_yaml(self.dq_from_mgr.popleft())
                     self.logger.info(f"Comando recibido desde manager: {msg.cmd}")
                     if msg == Message.END_CAPTURE:
-                        self.hw_stop_streaming()
+                        self._hw_stop_streaming()
                         self.state = AgentStatus.STAND_BY
                     elif msg == Message.START_CAPTURE:
-                        self.hw_start_streaming()
+                        self._hw_start_streaming()
                         self.state = AgentStatus.CAPTURING
                     elif msg == Message.QUERY_AGENT_STATE:
                         self.__manager_send(Message(Message.INFORM_AGENT_STATE, self.state).serialize())
@@ -227,15 +234,14 @@ class AbstractHWAgent(ABC):
                 if self.hw_state == HWStatus.NOT_CONNECTED or self.hw_state == HWStatus.ERROR:
                     if self.state == AgentStatus.CAPTURING:
                         self.state = AgentStatus.STARTING
-                        self.hw_stop_streaming()
-                        self.hw_reset_connection()
-                        self.hw_start_streaming()
+                        self._hw_stop_streaming()
+                        self._hw_reset_connection()
+                        self._hw_start_streaming()
                     elif self.state == AgentStatus.STAND_BY:
                         self.state = AgentStatus.STARTING
-                        self.hw_reset_connection()
+                        self._hw_reset_connection()
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
-            self.flag_quit.set()
         except Exception:
             self.logger.exception("")
         finally:
@@ -243,11 +249,11 @@ class AbstractHWAgent(ABC):
             self.flag_quit.set()
             mgr_comm.join(0.5)
             wrt.join(0.5)
-            self.hw_finalize()
+            self._hw_finalize()
             self.logger.info("Aplicación terminada")
 
     @abstractmethod
-    def pre_capture_file_update(self):
+    def _pre_capture_file_update(self):
         """
         Poner aquí codigo que se ejecute justo antes de actualizar el archivo de captura.
         Por ejemplo, enviar al manager estadísticas de la captura en el archivo actual
@@ -256,7 +262,7 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def hw_config(self):
+    def _hw_config(self):
         """
         Lee la config específica de hw del agente
         :return:
@@ -264,7 +270,7 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def hw_run_data_threads(self):
+    def _hw_run_data_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
@@ -272,7 +278,7 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def hw_finalize(self):
+    def _hw_finalize(self):
         """
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
@@ -280,26 +286,26 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def hw_start_streaming(self):
+    def _hw_start_streaming(self):
         """
         Inicia stream de datos desde el sensor
         """
         pass
 
     @abstractmethod
-    def hw_stop_streaming(self):
+    def _hw_stop_streaming(self):
         """
         Detiene el stream de datos desde el sensor
         """
         pass
 
     @abstractmethod
-    def hw_connect(self) -> bool:
+    def _hw_connect(self) -> bool:
         """
         Debe salir indicando si la conexión fue exitosa (True) o no (False)
         """
         pass
 
     @abstractmethod
-    def hw_reset_connection(self):
+    def _hw_reset_connection(self):
         pass

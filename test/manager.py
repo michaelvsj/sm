@@ -17,6 +17,7 @@ while not connected:
         connected = True
     except ConnectionRefusedError:
         time.sleep(0.1)
+        continue
 
 
 agent_ready = False
@@ -28,20 +29,23 @@ while not agent_ready:
     else:
         time.sleep(0.1)
 
+time.sleep(5)
+
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
 sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
 sock.sendall(Message(Message.START_CAPTURE).serialize())
-for i in range(1, 5):
+for i in range(1, 3):
     time.sleep(3)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)
     sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
 
-time.sleep(3)
+time.sleep(1)
 sock.sendall(Message(Message.END_CAPTURE).serialize())
-time.sleep(10)
+time.sleep(1)
 
+"""
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
 sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
@@ -55,3 +59,4 @@ for i in range(1, 5):
 time.sleep(3)
 sock.sendall(Message(Message.END_CAPTURE).serialize())
 time.sleep(2)
+"""
