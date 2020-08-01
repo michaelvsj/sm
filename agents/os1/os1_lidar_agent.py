@@ -130,27 +130,19 @@ class LidarAgent(AbstractHWAgent):
             if address[0] == self.lidar_ip and len(packet) == PACKET_SIZE:
                 first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")
                 # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
-                if first_measurement_id >= ADMIT_MEAS_ID_MORE_THAN and first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
+                if ADMIT_MEAS_ID_MORE_THAN <= first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
+                    # parsea y pone el paquete parseado en un buffer para su posterior escritura a disco
+                    packed, blocks = xyz_points_pack(unpack_lidar(packet), self.active_channels)
+                    self.dq_formatted_data.append(packed)
+
                     # Recopilación de datos para estadística de paquetes
-                    # self.writing_allowed.set() # TODO chequear la utilidad de esto en el PC onboard
                     frame_id = int.from_bytes(packet[10:12], byteorder="little")
                     try:
                         self.packets_per_frame[frame_id] += 1
                     except KeyError:
                         self.packets_per_frame[frame_id] = 1
-                    # parsea y pone el paquete parseado en un buffer para su posterior escritura a disco
-                    packed, blocks = xyz_points_pack(unpack_lidar(packet), self.active_channels)
-                    self.dq_formatted_data.append(packed)
                     self.blocks_valid += blocks[0]
                     self.blocks_invalid += blocks[1]
-
-                # de lo contrario usa el tiempo libre para escibir la data a disco (que es relativamente lento)
-                elif not self.flag_quit.is_set():
-                    #  TODO: setear un flag que autorice la escritura a disco.
-                    #   Esto debe implementarse en la clase abastracta también
-                    #   o bien hacer un override del método de escritura: __file_writer
-                    # self.writing_allowed.clear() # TODO chequear la utilidad de esto en el PC onboard
-                    pass
 
     def _pre_capture_file_update(self):
         frames = np.array(list(self.packets_per_frame.keys()))

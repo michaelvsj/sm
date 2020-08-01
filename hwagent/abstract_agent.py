@@ -92,8 +92,6 @@ class AbstractHWAgent(ABC):
         self.output_file_header = ''  # Debe ser redefinido por las clases que implementen la AbstractHWAgent
         self.output_file_is_binary = None
         self.output_file = None
-        self.writing_allowed = Event()  # Permite el control del thread de escritura de datos a archivo. La idea es "pausarlo" durante otras operaciones de críticas
-        self.writing_allowed.set() # Por defecto, se permite escritura
 
     def set_up(self):
         try:
@@ -153,9 +151,6 @@ class AbstractHWAgent(ABC):
 
     def __file_writer(self):
         while not self.flag_quit.is_set():
-            if not self.writing_allowed.is_set():
-                time.sleep(0.01)
-                continue
             if self.state == AgentStatus.CAPTURING \
                     and self.output_file is not None \
                     and len(self.dq_formatted_data) \
