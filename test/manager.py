@@ -35,7 +35,7 @@ _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
 sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
 sock.sendall(Message(Message.START_CAPTURE).serialize())
-for i in range(1, 3):
+for i in range(1, 30):
     time.sleep(3)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)

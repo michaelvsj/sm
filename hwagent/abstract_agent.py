@@ -153,7 +153,8 @@ class AbstractHWAgent(ABC):
 
     def __file_writer(self):
         while not self.flag_quit.is_set():
-            if not not self.writing_allowed.is_set():
+            if not self.writing_allowed.is_set():
+                time.sleep(0.01)
                 continue
             if self.state == AgentStatus.CAPTURING \
                     and self.output_file is not None \
@@ -164,7 +165,7 @@ class AbstractHWAgent(ABC):
                 except ValueError:  # Archivo se cerró entremedio
                     pass
             else:
-                time.sleep(0.01)
+                time.sleep(0.1)
 
     def __manager_connect(self):
         self.logger.info("Esperando conexión de manager")
