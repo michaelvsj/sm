@@ -32,6 +32,7 @@ class LidarAgent(AbstractHWAgent):
         self.host_ip = ""
         self.os1 = None
         self.receive_data = Event()
+        self.receive_data.clear()
         self.packets_per_frame = dict()
         self.blocks_valid = 0
         self.blocks_invalid = 0
@@ -114,19 +115,20 @@ class LidarAgent(AbstractHWAgent):
         pass
 
     def read_from_lidar(self):
-        buffer_size = 2 * PACKET_SIZE
-        start_counter = 0
+        buffer_size = PACKET_SIZE
+        os_buffer_size = self.sock.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
+
+        # Al iniciar, se salta el primer lote de paquetes que son los que están en el buffer y son "viejos"
+        bytes_recvd = 0
+        while bytes_recvd < os_buffer_size:
+            pkt = self.sock.recv(PACKET_SIZE)
+            bytes_recvd += len(pkt)
+
         while not self.flag_quit.is_set():
             packet, address = self.sock.recvfrom(buffer_size)
             if not self.receive_data.is_set():
                 continue
             if address[0] == self.lidar_ip and len(packet) == PACKET_SIZE:
-                #print(f"receive_data: {self.receive_data.is_set()}, address: {address}, packet_len: {len(packet)}")
-                # ignora los 64 primeos paquetes(equivalente a 2 frames. Número arbitrario), que pueden ser de un buffer de captura previa
-                # TODO: Verificar que sea necesario
-                if start_counter < 64:
-                    start_counter += 1
-                    continue
                 first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")
                 # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
                 if first_measurement_id >= ADMIT_MEAS_ID_MORE_THAN and first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
@@ -139,7 +141,7 @@ class LidarAgent(AbstractHWAgent):
                         self.packets_per_frame[frame_id] = 1
                     # parsea y pone el paquete parseado en un buffer para su posterior escritura a disco
                     packed, blocks = xyz_points_pack(unpack_lidar(packet), self.active_channels)
-                    self.dq_formatted_data.appendleft(packed)
+                    self.dq_formatted_data.append(packed)
                     self.blocks_valid += blocks[0]
                     self.blocks_invalid += blocks[1]
 

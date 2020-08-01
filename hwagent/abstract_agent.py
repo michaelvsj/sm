@@ -158,7 +158,7 @@ class AbstractHWAgent(ABC):
                     and len(self.dq_formatted_data) \
                     and not self.output_file.closed:
                 try:
-                    self.output_file.write(self.dq_formatted_data.pop())
+                    self.output_file.write(self.dq_formatted_data.popleft())
                 except ValueError:  # Archivo se cerró entremedio
                     pass
 
@@ -187,7 +187,7 @@ class AbstractHWAgent(ABC):
                     self.logger.warning(f"Conexión cerrada por manager")
                     self.__manager_connect()  # Intenta reconexión
                 else:
-                    self.dq_from_mgr.appendleft(cmd)
+                    self.dq_from_mgr.append(cmd)
             except TimeoutError:
                 pass
         self.logger.info("Terminando bucle __manager_recv")
@@ -209,7 +209,7 @@ class AbstractHWAgent(ABC):
         try:
             while True:
                 if len(self.dq_from_mgr):
-                    msg = Message.from_yaml(self.dq_from_mgr.pop())
+                    msg = Message.from_yaml(self.dq_from_mgr.popleft())
                     self.logger.info(f"Comando recibido desde manager: {msg.cmd}")
                     if msg == Message.END_CAPTURE:
                         self.hw_stop_streaming()
