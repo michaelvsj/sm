@@ -1,10 +1,20 @@
-manager_ip: 127.0.0.1
-manager_port: 0
-local_port: 30001
-output_file_name: lidar.bin
-hw_connection_retries: 5
-lidar_ip: 192.168.0.20 #IP del lidar
-host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
+#Las secciones y loggers de cada agente, llevan por nombre el mismo nombre de archivo del agente, sin la extesión ".py"
+os1_lidar_agent:
+  manager_ip: 127.0.0.1
+  manager_port: 0
+  local_port: 30001
+  output_file_name: lidar.bin
+  hw_connection_retries: 5
+  sensor_ip: 192.168.0.20 #IP del lidar
+  host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
+os1_imu_agent:
+  manager_ip: 127.0.0.1
+  manager_port: 0
+  local_port: 30002
+  output_file_name: imu_lidar.csv
+  hw_connection_retries: 5
+  sensor_ip: 192.168.0.20 #IP del lidar
+  host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 
 logging:
   version: 1
@@ -34,9 +44,9 @@ logging:
       root_handler:
         class : logging.NullHandler
   loggers:
-      os1_lidar:
+      os1_lidar_agent:
         handlers: [os1_lidar_handler]
-      os1_imu:
+      os1_imu_agent:
         handlers: [os1_imu_handler]
   root:
       level: DEBUG

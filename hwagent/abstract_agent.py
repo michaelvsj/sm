@@ -3,7 +3,7 @@ from os import path
 import sys
 import time
 import json
-
+import os, errno
 import yaml
 from enum import Enum, auto
 import logging, logging.config
@@ -13,6 +13,7 @@ from threading import Thread, Event
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
+CONFIG_FILE = "config.yaml"
 
 
 class Message:
@@ -72,14 +73,14 @@ class HWStatus:
 
 
 class AbstractHWAgent(ABC):
-    def __init__(self, config_file):
+    def __init__(self, config_section):
         self.logger = logging.getLogger()
         self.output_file_name = ''
         self.state = AgentStatus.STARTING
         self.hw_state = HWStatus.NOT_CONNECTED
         self.manager_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
         self.listen_port = 0  # Puerto TCP donde escuchará los comandos
-        self.config_file = config_file
+        self.config_section = config_section
         self.config = dict()
         self.flag_quit = Event()    #Bandera para avisar que hay que terminar el programa
         self.dq_from_mgr = deque()  #deque con los comandos provenientes del manager
@@ -99,8 +100,11 @@ class AbstractHWAgent(ABC):
             self.logger.info("Aplicación configurada e iniciando")
             try:
                 self.__sock.bind((TCP_IP, self.local_tcp_port))
-            except OSError:
-                self.logger.exception("")
+            except OSError as e:
+                if e.errno == errno.EADDRINUSE:
+                    self.logger.error(f"Dirección ya está en uso: {TCP_IP}:{self.local_tcp_port}")
+                else:
+                    self.logger.exception("")
                 sys.exit(1)
             self.__sock.listen(1)
             self.__sock.setblocking(True)
@@ -125,8 +129,9 @@ class AbstractHWAgent(ABC):
         return False
 
     def __configure(self):
-        self.config = yaml.load(open(self.config_file).read(), Loader=yaml.FullLoader)
-        logging.config.dictConfig(self.config["logging"])
+        full_config = yaml.load(open(CONFIG_FILE).read(), Loader=yaml.FullLoader)
+        logging.config.dictConfig(full_config["logging"])
+        self.config = full_config[self.config_section]
         self.manager_address = self.config["manager_ip"]
         self.manager_port = self.config["manager_port"]
         self.local_tcp_port = self.config["local_port"]
@@ -136,7 +141,6 @@ class AbstractHWAgent(ABC):
 
     def __update_capture_file(self, new_file_path):
         self.logger.info(f"Cambio de directorio a {new_file_path}")
-        self._pre_capture_file_update()
         if self.output_file_is_binary is None:
             self.logger.error("Error. Atributo self.output_file_is_binary debe ser True o False")
             print("Error. Atributo self.output_file_is_binary debe ser True o False")
@@ -144,6 +148,7 @@ class AbstractHWAgent(ABC):
         if self.output_file is not None:
             self.output_file.flush()
             self.output_file.close()
+            self._pre_capture_file_update()
         write_mode = 'wb' if self.output_file_is_binary else 'w'
         self.output_file = open(path.join(new_file_path, self.output_file_name), write_mode)
         if self.output_file_header:
@@ -243,7 +248,6 @@ class AbstractHWAgent(ABC):
         finally:
             self.logger.info("Terminando aplicación")
             self.flag_quit.set()
-            mgr_comm.join(0.5)
             wrt.join(0.5)
             self._hw_finalize()
             self.logger.info("Aplicación terminada")
@@ -251,8 +255,8 @@ class AbstractHWAgent(ABC):
     @abstractmethod
     def _pre_capture_file_update(self):
         """
-        Poner aquí codigo que se ejecute justo antes de actualizar el archivo de captura.
-        Por ejemplo, enviar al manager estadísticas de la captura en el archivo actual
+        Poner aquí codigo que se ejecute justo antes de que se abra el nuevo archivo de salida de datos.
+        Por ejemplo, calcular alguna estadistica del archivo de captura anterior o resetear alguna variable que se escriba a archivo
         :return:
         """
         pass

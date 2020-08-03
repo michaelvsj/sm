@@ -1,16 +1,20 @@
 import logging
 from pathlib import Path
+import json
+import logging
 import socket
 import time
-import json
+from pathlib import Path
 from threading import Thread, Event
-import sys
+import os
+import errno
 import numpy as np
 
-from agents.os1.core import OS1
-from agents.os1.utils import build_trig_table, xyz_points_pack
-from agents.os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, _unpack as unpack_lidar
-from hwagent.abstract_agent import AbstractHWAgent, AgentStatus, Message, HWStatus
+import init_agent  # Inserta la carpeta agents en el path del sistema
+from os1.core import OS1
+from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
+from os1.utils import build_trig_table, xyz_points_pack
+from hwagent.abstract_agent import AbstractHWAgent, HWStatus
 
 CONFIG_FILE = "config.yaml"
 LIDAR_UDP_PORT = 7502
@@ -23,12 +27,13 @@ LOST_PACKETS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de paquetes perdidos, 
 INVALID_BLOCKS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de bloques inválidos, se pasa a estado de error o warning
 
 
-class LidarAgent(AbstractHWAgent):
+class OS1LiDARAgent(AbstractHWAgent):
     def __init__(self):
-        AbstractHWAgent.__init__(self, CONFIG_FILE)
-        self.logger = logging.getLogger('os1_lidar')
+        self.agent_name = os.path.basename(__file__).split(".")[0]
+        AbstractHWAgent.__init__(self, self.agent_name)
+        self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = True
-        self.lidar_ip = ""
+        self.sensor_ip = ""
         self.host_ip = ""
         self.os1 = None
         self.receive_data = Event()
@@ -43,7 +48,7 @@ class LidarAgent(AbstractHWAgent):
         Lee la config específica de hw del agente
         :return:
         """
-        self.lidar_ip = self.config["lidar_ip"]
+        self.sensor_ip = self.config["sensor_ip"]
         self.host_ip = self.config["host_ip"]
 
     def _hw_run_data_threads(self):
@@ -51,8 +56,8 @@ class LidarAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.lidar_receiver = Thread(target=self.__read_from_lidar)
-        self.lidar_receiver.start()
+        self.sensor_data_receiver = Thread(target=self.__read_from_lidar)
+        self.sensor_data_receiver.start()
 
     def _hw_finalize(self):
         """
@@ -64,7 +69,7 @@ class LidarAgent(AbstractHWAgent):
             assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
-        self.lidar_receiver.join(0.5)
+        self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
     def _hw_start_streaming(self):
@@ -90,11 +95,14 @@ class LidarAgent(AbstractHWAgent):
 
         try:
             self.sock.bind((self.host_ip, LIDAR_UDP_PORT))
-        except OSError:
-            self.logger.exception("")
+        except OSError as e:
+            if e.errno == errno.EADDRINUSE:
+                self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{self.local_tcp_port}")
+            else:
+                self.logger.exception("")
             return False
 
-        self.os1 = OS1(self.lidar_ip, self.host_ip, mode="512x10")
+        self.os1 = OS1(self.sensor_ip, self.host_ip, mode="512x10")
         self.logger.info("Cargando parmámetros desde LiDAR ('beam intrinsics')")
         try:
             beam_intrinsics = json.loads(self.os1.get_beam_intrinsics())
@@ -111,8 +119,8 @@ class LidarAgent(AbstractHWAgent):
         return True
 
     def _hw_reset_connection(self):
+        self.sock.close()
         self._hw_connect()
-        pass
 
     def __read_from_lidar(self):
         os_buffer_size = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
@@ -127,7 +135,7 @@ class LidarAgent(AbstractHWAgent):
             packet, address = self.sock.recvfrom(PACKET_SIZE)
             if not self.receive_data.is_set():
                 continue
-            if address[0] == self.lidar_ip and len(packet) == PACKET_SIZE:
+            if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
                 first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")
                 # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
                 if ADMIT_MEAS_ID_MORE_THAN <= first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
@@ -184,6 +192,6 @@ class LidarAgent(AbstractHWAgent):
 
 if __name__ == "__main__":
     Path('logs').mkdir(exist_ok=True)
-    agent = LidarAgent()
+    agent = OS1LiDARAgent()
     agent.set_up()
     agent.run()
