@@ -9,12 +9,12 @@ from threading import Thread, Event
 import os
 import errno
 import numpy as np
-
+import sys
 import init_agent  # Inserta la carpeta agents en el path del sistema
 from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack
-from hwagent.abstract_agent import AbstractHWAgent, HWStatus
+from hwagent.abstract_agent import AbstractHWAgent, HWStatus, DEFAULT_CONFIG_FILE
 
 CONFIG_FILE = "config.yaml"
 LIDAR_UDP_PORT = 7502
@@ -28,9 +28,9 @@ INVALID_BLOCKS_ERROR_THRESHOLD = 5  # Sobre este porcentaje de bloques inválido
 
 
 class OS1LiDARAgent(AbstractHWAgent):
-    def __init__(self):
+    def __init__(self, config_file):
         self.agent_name = os.path.basename(__file__).split(".")[0]
-        AbstractHWAgent.__init__(self, self.agent_name)
+        AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = True
         self.sensor_ip = ""
@@ -191,7 +191,11 @@ class OS1LiDARAgent(AbstractHWAgent):
 
 
 if __name__ == "__main__":
+    cfg_file = DEFAULT_CONFIG_FILE
+    if len(sys.argv) > 1:
+        cfg_file = sys.argv[1]
+
     Path('logs').mkdir(exist_ok=True)
-    agent = OS1LiDARAgent()
+    agent = OS1LiDARAgent(config_file=cfg_file)
     agent.set_up()
     agent.run()

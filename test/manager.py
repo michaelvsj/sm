@@ -3,69 +3,77 @@ import time
 from pathlib import Path
 import yaml
 from hwagent.abstract_agent import AgentStatus, Message, HWStatus
+from threading import Thread
 
 Path('logs').mkdir(exist_ok=True)
 
-lidar_agent_address = ('127.0.0.1', 30001)
-lidar_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-lidar_sock.setblocking(True)
+my_socks = {}
 
-imu_agent_address = ('127.0.0.1', 30002)
-imu_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-imu_sock.setblocking(True)
+#my_socks["os1_lidar"] = {'address':('127.0.0.1', 30001), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+#my_socks["os1_imu"] = {'address':('127.0.0.1', 30002), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+my_socks["gps"] = {'address':('127.0.0.1', 30003), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+for item in my_socks.values():
+    item['socket'].setblocking(True)
 
-connected = False
-while not connected:
-    try:
-        lidar_sock.connect(lidar_agent_address)
-        connected = True
-    except ConnectionRefusedError:
-        time.sleep(0.1)
-        continue
-
-connected = False
-while not connected:
-    try:
-        imu_sock.connect(imu_agent_address)
-        connected = True
-    except ConnectionRefusedError:
-        time.sleep(0.1)
-        continue
+def send_to_all_agents(msg):
+    global my_socks
+    print(f"Sending {msg} to all agents")
+    for item in my_socks.values():
+        item['socket'].sendall(msg)
 
 
-agent_ready = False
-while not agent_ready:
-    lidar_sock.sendall(Message(Message.QUERY_AGENT_STATE).serialize())
-    rep = yaml.safe_load(lidar_sock.recv(1024).decode('ascii'))
-    if rep['arg'] == AgentStatus.STAND_BY:
-        agent_ready = True
-    else:
-        time.sleep(0.1)
+print("Conectadose a agentes")
+for item in my_socks.values():
+    connected = False
+    while not connected:
+        try:
+            item['socket'].connect(item['address'])
+            connected = True
+        except ConnectionRefusedError:
+            time.sleep(0.1)
+            continue
 
-time.sleep(5)
+print("Conectado a agentes")
+
+def gps_reader():
+    while True:
+        msg=my_socks['gps']['socket'].recv(1024)
+        msg=Message.from_yaml(msg)
+        print(msg.arg)
+gps_thread = Thread(target= gps_reader, daemon=True)
+gps_thread.start()
+
+
+if "os_lidar" in my_socks.keys():
+    agent_ready = False
+    while not agent_ready:
+        my_socks["os1_lidar"]["socket"].sendall(Message(Message.QUERY_AGENT_STATE).serialize())
+        rep = yaml.safe_load(my_socks["os1_lidar"]["socket"].recv(1024).decode('ascii'))
+        if rep['arg'] == AgentStatus.STAND_BY:
+            agent_ready = True
+        else:
+            time.sleep(0.1)
+
+    time.sleep(5)
 
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
 msg = Message(Message.SET_FOLDER, _dir).serialize()
-lidar_sock.sendall(msg)
-imu_sock.sendall(msg)
+send_to_all_agents(msg)
 
 msg = Message(Message.START_CAPTURE).serialize()
-lidar_sock.sendall(msg)
-imu_sock.sendall(msg)
+send_to_all_agents(msg)
 
-for i in range(1, 30):
-    time.sleep(3)
+for i in range(1, 20):
+    time.sleep(5)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)
     msg = Message(Message.SET_FOLDER, _dir).serialize()
-    lidar_sock.sendall(msg)
-    imu_sock.sendall(msg)
+    send_to_all_agents(msg)
 
 time.sleep(1)
 msg = Message(Message.END_CAPTURE).serialize()
-lidar_sock.sendall(msg)
-imu_sock.sendall(msg)
+send_to_all_agents(msg)
 time.sleep(1)
 
 """

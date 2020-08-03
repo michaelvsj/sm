@@ -5,22 +5,22 @@ import socket
 from pathlib import Path
 from threading import Thread, Event
 import time
-
+import sys
 import init_agent
-from hwagent.abstract_agent import AbstractHWAgent
+from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from os1.imu_packet import PACKET_SIZE, unpack as unpack_imu
 
 IMU_UDP_PORT = 7503
 
 
 class OS1IMUAgent(AbstractHWAgent):
-    def __init__(self):
+    def __init__(self, config_file):
         self.agent_name = os.path.basename(__file__).split(".")[0]
-        AbstractHWAgent.__init__(self, self.agent_name)
+        AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
         self.output_file_header = "timestamp_system_(s);timestamp_accel_(us);timestamp_gyro_(us);accel_x_(g);" \
-                                  "accel_y_(g);accel_z_(g);gyro_x_(deg/sec);gyro_y_(deg/sec);gyro_z_(deg/sec)\n"
+                                  "accel_y_(g);accel_z_(g);gyro_x_(deg/sec);gyro_y_(deg/sec);gyro_z_(deg/sec)"
         self.sensor_ip = ""
         self.host_ip = ""
         self.receive_data = Event()
@@ -95,7 +95,7 @@ class OS1IMUAgent(AbstractHWAgent):
             if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
                 ti, ta, tg, ax, ay, az, gx, gy, gz = unpack_imu(packet)
                 f_data = f"{time.time():.3f};{int(ta / 1000)};{int(tg / 1000)};" \
-                         f"{ax:.3f};{ay:.3f};{az:.3f};{gx:.3f};{gy:.3f};{gz:.3f}\n"
+                         f"{ax:.3f};{ay:.3f};{az:.3f};{gx:.3f};{gy:.3f};{gz:.3f}"
                 self.dq_formatted_data.append(f_data)
 
 
@@ -111,7 +111,11 @@ class OS1IMUAgent(AbstractHWAgent):
 
 
 if __name__ == "__main__":
+    cfg_file = DEFAULT_CONFIG_FILE
+    if len(sys.argv) > 1:
+        cfg_file = sys.argv[1]
+
     Path('logs').mkdir(exist_ok=True)
-    agent = OS1IMUAgent()
+    agent = OS1IMUAgent(config_file=cfg_file)
     agent.set_up()
     agent.run()

@@ -13,8 +13,7 @@ from threading import Thread, Event
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
-CONFIG_FILE = "config.yaml"
-
+DEFAULT_CONFIG_FILE = 'config.yaml'
 
 class Message:
     START_CAPTURE = 'START_CAPTURE'
@@ -39,7 +38,7 @@ class Message:
 
     def __eq__(self, other):
         if isinstance(other, str):
-            return  self.cmd == other
+            return self.cmd == other
         elif isinstance(other, Message):
             return self.cmd == other.cmd
         elif isinstance(other, dict):
@@ -73,13 +72,14 @@ class HWStatus:
 
 
 class AbstractHWAgent(ABC):
-    def __init__(self, config_section):
+    def __init__(self, config_section, config_file=DEFAULT_CONFIG_FILE):
         self.logger = logging.getLogger()
         self.output_file_name = ''
         self.state = AgentStatus.STARTING
         self.hw_state = HWStatus.NOT_CONNECTED
-        self.manager_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
+        self.manager_ip_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
         self.listen_port = 0  # Puerto TCP donde escuchará los comandos
+        self.config_file = config_file
         self.config_section = config_section
         self.config = dict()
         self.flag_quit = Event()    #Bandera para avisar que hay que terminar el programa
@@ -87,7 +87,7 @@ class AbstractHWAgent(ABC):
         self.dq_formatted_data = deque() #Deque que contiene la data formateada lista para escribir a disco
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.local_tcp_port = ''
-        self.manager_port = ''
+        self.manager_tcp_port = ''
         self.connection = None
         self.current_folder = ''
         self.output_file_header = ''  # Debe ser redefinido por las clases que implementen la AbstractHWAgent
@@ -129,11 +129,11 @@ class AbstractHWAgent(ABC):
         return False
 
     def __configure(self):
-        full_config = yaml.load(open(CONFIG_FILE).read(), Loader=yaml.FullLoader)
+        full_config = yaml.load(open(self.config_file).read(), Loader=yaml.FullLoader)
         logging.config.dictConfig(full_config["logging"])
+        self.manager_ip_address = full_config["manager_ip"]
         self.config = full_config[self.config_section]
-        self.manager_address = self.config["manager_ip"]
-        self.manager_port = self.config["manager_port"]
+        self.manager_tcp_port = self.config["manager_port"]
         self.local_tcp_port = self.config["local_port"]
         self.output_file_name = self.config["output_file_name"]
         self.hw_connections_retries = self.config["hw_connection_retries"]
@@ -152,7 +152,7 @@ class AbstractHWAgent(ABC):
         write_mode = 'wb' if self.output_file_is_binary else 'w'
         self.output_file = open(path.join(new_file_path, self.output_file_name), write_mode)
         if self.output_file_header:
-            self.output_file.write(self.output_file_header)
+            self.output_file.write(self.output_file_header + os.linesep)
 
     def __file_writer(self):
         while not self.flag_quit.is_set():
@@ -161,7 +161,7 @@ class AbstractHWAgent(ABC):
                     and len(self.dq_formatted_data) \
                     and not self.output_file.closed:
                 try:
-                    self.output_file.write(self.dq_formatted_data.popleft())
+                    self.output_file.write(self.dq_formatted_data.popleft() + os.linesep)
                 except ValueError:  # Archivo se cerró entremedio
                     pass
             else:
@@ -201,7 +201,14 @@ class AbstractHWAgent(ABC):
         self.connection.close()
 
     def __manager_send(self, msg):
-        self.connection.sendall(msg)
+        try:
+            self.connection.sendall(msg)
+        except BrokenPipeError:
+            pass
+
+    def _send_data_to_mgr(self, data):
+        msg = Message(cmd=Message.DATA, arg=data).serialize()
+        self.__manager_send(msg)
 
     def run(self):
         self.logger.info("Iniciando thread de comunicación con manager")
