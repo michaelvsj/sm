@@ -23,7 +23,7 @@ class CameraAgent(AbstractHWAgent):
         self.write_data.clear()
 
 
-    def _hw_config(self):
+    def _agent_config(self):
         """
         Lee la config específica de hw del agente
         :return:
@@ -32,7 +32,7 @@ class CameraAgent(AbstractHWAgent):
         self.period = self.config["period"]
         self.dev_file = self.config["dev_file"]
 
-    def _hw_run_data_threads(self):
+    def _agent_run_data_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
@@ -40,7 +40,7 @@ class CameraAgent(AbstractHWAgent):
         self.sensor_data_receiver = Thread(target=self.__capture_image)
         self.sensor_data_receiver.start()
 
-    def _hw_finalize(self):
+    def _agent_finalize(self):
         """
         Se prepara para terminar el agente
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
@@ -53,24 +53,24 @@ class CameraAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(1.1)
 
 
-    def _hw_start_streaming(self):
+    def _agent_start_streaming(self):
         """
         Inicia stream de datos desde el sensor
         """
         self.write_data.set()
         pass
 
-    def _hw_stop_streaming(self):
+    def _agent_stop_streaming(self):
         """
         Detiene el stream de datos desde el sensor
         """
         self.write_data.clear()
         pass
 
-    def _hw_connect(self):
+    def _agent_connect_hw(self):
         return True
 
-    def _hw_reset_connection(self):
+    def _agent_reset_hw_connection(self):
         pass
 
 
@@ -90,10 +90,10 @@ class CameraAgent(AbstractHWAgent):
                 time.sleep(0.1)
                 continue
             command_time = time.time()
-            path = os.path.join(self.output_folder, IMAGES_FOLDER)
-            Path(path).mkdir(parents=False, exist_ok=True)
-            file_name = os.path.join(path, f"{command_time:.1f}.jpeg")
             try:
+                path = os.path.join(self.output_folder, IMAGES_FOLDER)
+                Path(path).mkdir(parents=False, exist_ok=True)
+                file_name = os.path.join(path, f"{command_time:.1f}.jpeg")
                 cp = subprocess.run(["fswebcam", "-r", self.resolution, "--no-banner", "-q", "--save", file_name], capture_output=True)
                 if cp.returncode or not os.path.exists(file_name):
                     self.hw_state = HWStatus.ERROR

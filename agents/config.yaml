@@ -32,6 +32,14 @@ camera_agent:
   dev_file: /dev/video0
   period: 1
   resolution: 640x480
+imu_agent:
+  manager_port: 0
+  local_port: 30005
+  output_file_name: yost_3space_imu.csv
+  hw_connection_retries: 5
+  sample_rate: 200 #Hz
+  usb_id: 2476:1010
+  com_port: /dev/ttyYOST0
 logging:
   version: 1
   disable_existing_loggers: True

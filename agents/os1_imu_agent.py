@@ -26,7 +26,7 @@ class OS1IMUAgent(AbstractHWAgent):
         self.receive_data = Event()
         self.receive_data.clear()
 
-    def _hw_config(self):
+    def _agent_config(self):
         """
         Lee la config específica de hw del agente
         :return:
@@ -34,7 +34,7 @@ class OS1IMUAgent(AbstractHWAgent):
         self.sensor_ip = self.config["sensor_ip"]
         self.host_ip = self.config["host_ip"]
 
-    def _hw_run_data_threads(self):
+    def _agent_run_data_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
@@ -42,7 +42,7 @@ class OS1IMUAgent(AbstractHWAgent):
         self.sensor_data_receiver = Thread(target=self.__read_from_imu)
         self.sensor_data_receiver.start()
 
-    def _hw_finalize(self):
+    def _agent_finalize(self):
         """
         Se prepara para terminar el agente
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
@@ -55,21 +55,21 @@ class OS1IMUAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
-    def _hw_start_streaming(self):
+    def _agent_start_streaming(self):
         """
         Inicia stream de datos desde el sensor
         """
         self.receive_data.set()
         pass
 
-    def _hw_stop_streaming(self):
+    def _agent_stop_streaming(self):
         """
         Detiene el stream de datos desde el sensor
         """
         self.receive_data.clear()
         pass
 
-    def _hw_connect(self):
+    def _agent_connect_hw(self):
         self.receive_data.clear()
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -83,9 +83,9 @@ class OS1IMUAgent(AbstractHWAgent):
             return False
         return True
 
-    def _hw_reset_connection(self):
+    def _agent_reset_hw_connection(self):
         self.sock.close()
-        self._hw_connect()
+        self._agent_connect_hw()
 
     def __read_from_imu(self):
         while not self.flag_quit.is_set():

@@ -35,7 +35,7 @@ class GPSAgent(AbstractHWAgent):
         self.sim_acceleration_sign = 1  # Usado para simular aceleración y frenado
         self.geod = Geod(ellps='WGS84')
 
-    def _hw_config(self):
+    def _agent_config(self):
         """
         Lee la config específica de hw del agente
         :return:
@@ -44,18 +44,15 @@ class GPSAgent(AbstractHWAgent):
         self.baudrate = self.config["baudrate"]
         self.simulate = bool(self.config["simulate"])
 
-    def _hw_run_data_threads(self):
+    def _agent_run_data_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        if self.simulate:
-            self.sensor_data_receiver = Thread(target=self.__read_from_simulator)
-        else:
-            self.sensor_data_receiver = Thread(target=self.__read_from_gps)
+        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data())
         self.sensor_data_receiver.start()
 
-    def _hw_finalize(self):
+    def _agent_finalize(self):
         """
         Se prepara para terminar el agente
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
@@ -68,21 +65,21 @@ class GPSAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(1.1)
         self.ser.close()
 
-    def _hw_start_streaming(self):
+    def _agent_start_streaming(self):
         """
         Inicia stream de datos desde el sensor
         """
         self.write_data.set()
         pass
 
-    def _hw_stop_streaming(self):
+    def _agent_stop_streaming(self):
         """
         Detiene el stream de datos desde el sensor
         """
         self.write_data.clear()
         pass
 
-    def _hw_connect(self):
+    def _agent_connect_hw(self):
         self.write_data.clear()
         self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
         if isinstance(self.ser, serial.Serial) and self.ser.is_open:
@@ -94,9 +91,21 @@ class GPSAgent(AbstractHWAgent):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
-    def _hw_reset_connection(self):
+    def _agent_reset_hw_connection(self):
         self.ser.close()
-        self._hw_connect()
+        self._agent_connect_hw()
+
+    def __receive_and_pipe_data(self):
+        while not self.flag_quit.is_set():
+            if self.simulate:
+                r = self.__read_from_simulator()
+            else:
+                r = self.__read_from_gps()
+            if r:
+                if self.__update_data():
+                    self._send_data_to_mgr(self.datapoint)
+                    if self.write_data.is_set():
+                        self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
 
     def __read_from_simulator(self):
         while not self.flag_quit.is_set():
@@ -127,9 +136,9 @@ class GPSAgent(AbstractHWAgent):
             self.datapoint["gps_qual"] = 2
             self.datapoint["num_sats"] = 4
 
-            self.__update_gps_data()
-
             time.sleep(1)
+
+            return True
 
     def __read_from_gps(self):
         """
@@ -140,13 +149,13 @@ class GPSAgent(AbstractHWAgent):
                 bytes_in = self.ser.readline()
             except (serial.SerialException, serial.SerialTimeoutException):
                 self.logger.exception(f"Error al leer del GPS. Reseteando conexión")
-                self._hw_reset_connection()
+                self._agent_reset_hw_connection()
                 continue
             if len(bytes_in):
                 try:
                     decoded = bytes_in.decode('ASCII')
                     if self.__parse_nmea(decoded):
-                        self.__update_gps_data()
+                        return True
                 except UnicodeDecodeError:
                     pass
 
@@ -172,29 +181,32 @@ class GPSAgent(AbstractHWAgent):
         except pynmea2.nmea.ParseError:
             return False
 
-    def __update_gps_data(self):
+    def __update_data(self):
+        """
+        Actualiza distancia recorrida y agrega timestamp de sistema
+        Encola mensajes de datos GPS para el manager y para el escritor a archiv
+        :return:
+        True cuando logra actualizar los datos
+        False cuando no
+        """
         self.datapoint["sys_timestamp"] = round(time.time(), 3)  # 3 decimales basta
-        self.datapoint["distance_delta"] = None
+        self.datapoint["distance_delta"] = 0
         try:
             if int(self.datapoint["latitude"]) != 0:
                 current_coords = [float(self.datapoint["longitude"]), float(self.datapoint["latitude"])]
                 if self.last_coords is None:
                     self.last_coords = current_coords
-                    return
+                    return False
                 az12, az21, dist = self.geod.inv(current_coords[0], current_coords[1], self.last_coords[0], self.last_coords[1])
                 self.last_coords = current_coords
                 self.datapoint["distance_delta"] = round(dist, 1)   # 1 decimal basta
                 self.logger.debug(f"Actualizando status a: {self.datapoint} ")
-
-                # Envia datos al manager
-                self._send_data_to_mgr(self.datapoint)
-
-                # Pone los datos en la cola para escritura a archivo
-                if self.write_data.is_set():
-                    self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
-
+                return True
+            else:
+                return False
         except Exception:
             self.logger.exception("")
+            return False
 
     def _pre_capture_file_update(self):
         pass
@@ -205,24 +217,6 @@ class GPSAgent(AbstractHWAgent):
         else:
             self.hw_state = HWStatus.NOMINAL
         """
-
-    # Pone timestamp y la distancia recorrida desde la última actualización
-    def __update_status(self):
-        self.datapoint["sys_timestamp"] = round(time.time(), 3)  # 3 decimales basta
-        self.datapoint["distance_delta"] = None
-        try:
-            if int(self.datapoint["latitude"]) != 0:
-                current_coords = [float(self.datapoint["longitude"]), float(self.datapoint["latitude"])]
-                if self.last_coords is None:
-                    self.last_coords = current_coords
-                    return
-                az12, az21, dist = self.geod.inv(current_coords[0], current_coords[1], self.last_coords[0], self.last_coords[1])
-                self.last_coords = current_coords
-                self.datapoint["distance_delta"] = round(dist, 1)   # 1 decimal basta
-                self.logger.debug(f"Actualizando status a: {self.datapoint} ")
-
-        except Exception as e:
-            self.logger.exception(str(e))
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE
