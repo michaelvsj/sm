@@ -25,6 +25,7 @@ class IMUAgent(AbstractHWAgent):
         self.write_data = Event()
         self.write_data.clear()
         self.com_port = ""
+        self.ser = None
         self.output_file_header = HEADER
 
     def _agent_config(self):
@@ -40,7 +41,7 @@ class IMUAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data())
+        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data)
         self.sensor_data_receiver.start()
 
     def _agent_finalize(self):
@@ -54,18 +55,16 @@ class IMUAgent(AbstractHWAgent):
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
         self.sensor_data_receiver.join(0.1)
+        self.yost_api = None
         self.ser.close()
 
     def _agent_start_streaming(self):
         """
         Inicia stream de datos desde el sensor
         """
-        self.ser.flush()
-        self.ser.reset_input_buffer()
         self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
         self.yost_api.start_streaming()
         self.write_data.set()
-        pass
 
     def _agent_stop_streaming(self):
         """
@@ -73,21 +72,12 @@ class IMUAgent(AbstractHWAgent):
         """
         self.yost_api.stop_streaming()
         self.write_data.clear()
-        pass
 
     def _agent_connect_hw(self):
         self.write_data.clear()
-        self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {BAUD_RATE} bps")
-        if isinstance(self.ser, serial.Serial) and self.ser.is_open:
-            return True
+        self.yost_api = Yost3SpaceAPI(self.com_port, self.sample_rate)
         try:
-            self.ser = serial.Serial(self.com_port, BAUD_RATE, timeout=READ_TIMEOUT)
-            self.yost_api = Yost3SpaceAPI(self.ser, self.sample_rate)
-            self.logger.info(f"Configurando IMU. Frecuencia de muestreo: {self.sample_rate} Hz")
-            self.yost_api.set_streaming_slots()
-            self.yost_api.set_streaming_timing()
-            self.yost_api.set_response_header()
-            self.yost_api.commit_settings()
+            self.yost_api.setup()
             return True
         except (serial.SerialException, serial.SerialTimeoutException):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
@@ -98,17 +88,14 @@ class IMUAgent(AbstractHWAgent):
         self._agent_connect_hw()
 
     def __receive_and_pipe_data(self):
-        num_values = 10
-        bytes_per_value = 4
-        bytes_expected = num_values * bytes_per_value
         while not self.flag_quit.is_set():
             try:
-                bytes_in = self.ser.read(bytes_expected)
-                if len(bytes_in) == bytes_expected:
-                    data_line = f"{time.time():.3f}; {';'.join([format(v, '2.3f') for v in unpack(bytes_in)])}"
+                data = self.yost_api.read_datapoint()
+                if data:
+                    data_line = f"{time.time():.3f}; {';'.join([format(v, '2.3f') for v in data])}"
                     if self.write_data.is_set():
                         self.dq_formatted_data.append(data_line)
-                elif len(bytes_in) == 0:
+                else:
                     self.hw_state = HWStatus.ERROR
                     self.logger.exception("Error al leer del acelerómetro vía puerto serial")
             except Exception:

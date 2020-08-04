@@ -25,15 +25,17 @@ class Message:
     INFORM_HW_STATE = 'INFORM_HW_STATE'
     DATA = 'DATA'
 
+    EOT = b'\x1E'     # Separador de mensajes
+
     def __init__(self, cmd, arg=''):
         self.cmd = cmd
         self.arg = arg
 
     @classmethod
-    def from_yaml(cls, yml):
-        if isinstance(yml, (bytes, bytearray)):
-            yml = yml.decode('ascii')
-        d = dict(yaml.safe_load(yml))
+    def deserialize(cls, msg):
+        if isinstance(msg, (bytes, bytearray)):
+            msg = msg.decode('ascii')
+        d = dict(yaml.safe_load(msg))
         return cls(d['cmd'], d['arg'])
 
     def __eq__(self, other):
@@ -47,7 +49,8 @@ class Message:
             return False
 
     def serialize(self):
-        return yaml.dump({'cmd': self.cmd, 'arg': self.arg}).encode('ascii')
+        m = yaml.dump({'cmd': self.cmd, 'arg': self.arg}).encode('ascii')
+        return m + self.EOT
 
 
 class AgentStatus:
@@ -194,17 +197,20 @@ class AbstractHWAgent(ABC):
         Este método debe recibir, parsear y colocar las instrucciones desde el manager en un deque para ser leido desde el bucle principal
         :return:
         """
+        cmd = b''
         while not self.flag_quit.is_set():
             try:
-                cmd = self.connection.recv(MGR_COMM_BUFFER)
-                if not cmd:  # Se cerró la conexion
+                bt = self.connection.recv(1)
+                if bt == Message.EOT:
+                    self.dq_from_mgr.appendleft(Message.deserialize(cmd))
+                    cmd = b''
+                elif bt != Message.EOT:
+                    cmd += bt
+                elif not cmd:  # Se cerró la conexion
                     self.logger.warning(f"Conexión cerrada por manager")
                     self.__manager_connect()  # Intenta reconexión
-                else:
-                    self.dq_from_mgr.append(cmd)
             except TimeoutError:
                 pass
-        self.logger.info("Terminando bucle __manager_recv")
         self.connection.close()
 
     def __manager_send(self, msg):
@@ -234,7 +240,7 @@ class AbstractHWAgent(ABC):
             while True:
                 time.sleep(0.01)
                 if len(self.dq_from_mgr):
-                    msg = Message.from_yaml(self.dq_from_mgr.popleft())
+                    msg = self.dq_from_mgr.pop()
                     self.logger.info(f"Comando recibido desde manager: {msg.cmd}")
                     if msg == Message.END_CAPTURE:
                         self._agent_stop_streaming()

@@ -9,12 +9,15 @@ Path('logs').mkdir(exist_ok=True)
 
 my_socks = {}
 
-#my_socks["os1_lidar"] = {'address':('127.0.0.1', 30001), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
-#my_socks["os1_imu"] = {'address':('127.0.0.1', 30002), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
-my_socks["gps"] = {'address':('127.0.0.1', 30003), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
-#my_socks["camera"] = {'address':('127.0.0.1', 30004), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+# my_socks["os1_lidar"] = {'address':('127.0.0.1', 30001), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+# my_socks["os1_imu"] = {'address':('127.0.0.1', 30002), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+# my_socks["gps"] = {'address':('127.0.0.1', 30003), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+# my_socks["camera"] = {'address':('127.0.0.1', 30004), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+my_socks["imu"] = {'address': ('127.0.0.1', 30005), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+
 for item in my_socks.values():
     item['socket'].setblocking(True)
+
 
 def send_to_all_agents(msg):
     global my_socks
@@ -24,13 +27,14 @@ def send_to_all_agents(msg):
 
 
 print("Conectadose a agentes")
-for item in my_socks.values():
+for name, item in my_socks.items():
     connected = False
     while not connected:
         try:
             item['socket'].connect(item['address'])
             connected = True
-            time.sleep(0.1) #Parece ser necesario
+            print(f"Conectado a {name}")
+            time.sleep(0.2)  # Parece ser necesario
         except ConnectionRefusedError:
             time.sleep(0.1)
             continue
@@ -40,12 +44,13 @@ print("Conectado a agentes")
 if "gps" in my_socks.keys():
     def gps_reader():
         while True:
-            msg=my_socks['gps']['socket'].recv(1024)
-            msg=Message.from_yaml(msg)
+            msg = my_socks['gps']['socket'].recv(1024)
+            msg = Message.deserialize(msg)
             print(msg.arg)
-    gps_thread = Thread(target= gps_reader, daemon=True)
-    gps_thread.start()
 
+
+    gps_thread = Thread(target=gps_reader, daemon=True)
+    gps_thread.start()
 
 if "os_lidar" in my_socks.keys():
     agent_ready = False

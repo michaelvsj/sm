@@ -39,7 +39,7 @@ imu_agent:
   hw_connection_retries: 5
   sample_rate: 200 #Hz
   usb_id: 2476:1010
-  com_port: /dev/ttyYOST0
+  com_port: /dev/ttyACM1
 logging:
   version: 1
   disable_existing_loggers: True
@@ -83,6 +83,15 @@ logging:
         interval: 1
         backupCount: 7
         encoding: utf-8
+      imu_handler:
+        class: logging.handlers.TimedRotatingFileHandler
+        level: DEBUG
+        formatter: simple
+        filename: logs/imu.log
+        when: midnight
+        interval: 1
+        backupCount: 7
+        encoding: utf-8
       root_handler:
         class : logging.NullHandler
   loggers:
@@ -94,6 +103,8 @@ logging:
         handlers: [gps_handler]
       camera_agent:
         handlers: [camera_handler]
+      imu_agent:
+        handlers: [imu_handler]
   root:
       level: DEBUG
       handlers: [root_handler]
