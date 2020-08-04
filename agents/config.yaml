@@ -23,7 +23,15 @@ gps_agent:
   com_port: /dev/ttyACM0 #/dev/ttyGPS0
   usb_id: 067b:2303
   baudrate: 4800
-  simulate: False
+  simulate: True
+camera_agent:
+  manager_port: 0
+  local_port: 30004
+  output_file_name:
+  hw_connection_retries: 5
+  dev_file: /dev/video0
+  period: 1
+  resolution: 640x480
 logging:
   version: 1
   disable_existing_loggers: True
@@ -58,6 +66,15 @@ logging:
         interval: 1
         backupCount: 7
         encoding: utf-8
+      camera_handler:
+        class: logging.handlers.TimedRotatingFileHandler
+        level: DEBUG
+        formatter: simple
+        filename: logs/camera.log
+        when: midnight
+        interval: 1
+        backupCount: 7
+        encoding: utf-8
       root_handler:
         class : logging.NullHandler
   loggers:
@@ -67,6 +84,8 @@ logging:
         handlers: [os1_imu_handler]
       gps_agent:
         handlers: [gps_handler]
+      camera_agent:
+        handlers: [camera_handler]
   root:
       level: DEBUG
       handlers: [root_handler]

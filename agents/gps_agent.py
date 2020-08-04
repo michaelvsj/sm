@@ -1,17 +1,17 @@
-import errno
 import logging
 import os
-import socket
+import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from threading import Thread, Event
-import time
-import serial
-import sys
+
 import pynmea2
+import serial
 from pyproj import Geod
+
 import init_agent
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from os1.imu_packet import PACKET_SIZE, unpack as unpack_imu
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
 RMC_FIELDS = ["latitude", "longitude", "timestamp", "spd_over_grnd", "true_course"]
@@ -99,7 +99,37 @@ class GPSAgent(AbstractHWAgent):
         self._hw_connect()
 
     def __read_from_simulator(self):
-        pass
+        while not self.flag_quit.is_set():
+            # Inicialización
+            if not isinstance(self.datapoint["longitude"], float):
+                self.datapoint["longitude"] = -73.22029516666667
+                self.datapoint["latitude"] = -37.218540833333336
+                self.datapoint["spd_over_grnd"] = 5
+            azimuth = 45
+            sp_delta = 0.5
+            prev_spd = self.datapoint["spd_over_grnd"]
+
+            if prev_spd <= 0:
+                self.sim_acceleration_sign = 1
+            if prev_spd >= 15:
+                self.sim_acceleration_sign = -1
+            speed = max((prev_spd + self.sim_acceleration_sign * sp_delta), 0)
+            dist = speed  # ya que se lee cada 1 segundo
+
+            longitude, latitude, az = self.geod.fwd(lons=self.datapoint["longitude"], lats=self.datapoint["latitude"],
+                                                    az=azimuth, dist=dist)
+            timestring = datetime.utcfromtimestamp(time.time()).strftime('%H:%M:%S')
+            self.datapoint["latitude"] = latitude
+            self.datapoint["longitude"] = longitude
+            self.datapoint["timestamp"] = timestring
+            self.datapoint["spd_over_grnd"] = speed
+            self.datapoint["true_course"] = azimuth
+            self.datapoint["gps_qual"] = 2
+            self.datapoint["num_sats"] = 4
+
+            self.__update_gps_data()
+
+            time.sleep(1)
 
     def __read_from_gps(self):
         """

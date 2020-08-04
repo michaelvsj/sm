@@ -75,6 +75,7 @@ class AbstractHWAgent(ABC):
     def __init__(self, config_section, config_file=DEFAULT_CONFIG_FILE):
         self.logger = logging.getLogger()
         self.output_file_name = ''
+        self.output_folder = ''
         self.state = AgentStatus.STARTING
         self.hw_state = HWStatus.NOT_CONNECTED
         self.manager_ip_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
@@ -135,12 +136,18 @@ class AbstractHWAgent(ABC):
         self.config = full_config[self.config_section]
         self.manager_tcp_port = self.config["manager_port"]
         self.local_tcp_port = self.config["local_port"]
-        self.output_file_name = self.config["output_file_name"]
         self.hw_connections_retries = self.config["hw_connection_retries"]
+        try:
+            self.output_file_name = self.config["output_file_name"]
+        except KeyError:
+            pass
         self._hw_config()
 
     def __update_capture_file(self, new_file_path):
         self.logger.info(f"Cambio de directorio a {new_file_path}")
+        self.output_folder = new_file_path
+        if not self.output_file_name:   # Si no está definido el nombre de arrchivo (presumiblemente porque no se genera)
+            return
         if self.output_file_is_binary is None:
             self.logger.error("Error. Atributo self.output_file_is_binary debe ser True o False")
             print("Error. Atributo self.output_file_is_binary debe ser True o False")
@@ -214,9 +221,12 @@ class AbstractHWAgent(ABC):
         self.logger.info("Iniciando thread de comunicación con manager")
         mgr_comm = Thread(target=self.__manager_recv, daemon=True)
         mgr_comm.start()
+
         self.logger.info("Iniciando thread de escritura a disco")
         wrt = Thread(target=self.__file_writer)
-        wrt.start()
+        if self.output_file_name:
+            wrt.start()
+
         self.logger.info("Iniciando threads de manejo de datos de hardware")
         self._hw_run_data_threads()
         self.logger.info("Iniciando bucle principal")
@@ -255,7 +265,8 @@ class AbstractHWAgent(ABC):
         finally:
             self.logger.info("Terminando aplicación")
             self.flag_quit.set()
-            wrt.join(0.5)
+            if wrt.is_alive():
+                wrt.join(0.5)
             self._hw_finalize()
             self.logger.info("Aplicación terminada")
 
