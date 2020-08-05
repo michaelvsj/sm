@@ -11,12 +11,14 @@ import serial
 from pyproj import Geod
 
 import init_agent
+from devices import Devices, HWStates
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
 RMC_FIELDS = ["latitude", "longitude", "timestamp", "spd_over_grnd", "true_course"]
 GGA_FIELDS = ["gps_qual", "num_sats"]
 READ_TIMEOUT = 1.5
+
 
 class GPSAgent(AbstractHWAgent):
     def __init__(self, config_file):
@@ -34,6 +36,12 @@ class GPSAgent(AbstractHWAgent):
         self.output_file_header = ";".join([k for k in self.datapoint.keys()])
         self.sim_acceleration_sign = 1  # Usado para simular aceleración y frenado
         self.geod = Geod(ellps='WGS84')
+
+    def _get_device_name(self):
+        return Devices.GPS
+
+    def _agent_process_manager_message(self, msg):
+        pass
 
     def _agent_config(self):
         """
@@ -173,7 +181,7 @@ class GPSAgent(AbstractHWAgent):
                     self.datapoint[attr] = "0.0" if str_value == 'None' else str_value
                     try:
                         self.datapoint[attr] = float(self.datapoint[attr])
-                    except ValueError:  #en general puede convertir a floar, salvo en campos como "timestamp"
+                    except ValueError:  # en general puede convertir a floar, salvo en campos como "timestamp"
                         pass
                 return True  # Sí hubo actualización de coordenada
         except UnicodeDecodeError:
@@ -197,9 +205,10 @@ class GPSAgent(AbstractHWAgent):
                 if self.last_coords is None:
                     self.last_coords = current_coords
                     return False
-                az12, az21, dist = self.geod.inv(current_coords[0], current_coords[1], self.last_coords[0], self.last_coords[1])
+                az12, az21, dist = self.geod.inv(current_coords[0], current_coords[1], self.last_coords[0],
+                                                 self.last_coords[1])
                 self.last_coords = current_coords
-                self.datapoint["distance_delta"] = round(dist, 1)   # 1 decimal basta
+                self.datapoint["distance_delta"] = round(dist, 1)  # 1 decimal basta
                 self.logger.debug(f"Actualizando status a: {self.datapoint} ")
                 return True
             else:
@@ -217,6 +226,7 @@ class GPSAgent(AbstractHWAgent):
         else:
             self.hw_state = HWStatus.NOMINAL
         """
+
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE

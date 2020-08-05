@@ -10,7 +10,8 @@ from threading import Thread, Event
 import serial
 
 import init_agent
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE, HWStatus
+from devices import Devices
+from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE, __States
 from yost3space.api import Yost3SpaceAPI, READ_TIMEOUT, BAUD_RATE, unpack
 
 HEADER = "system_time (s);accel_x (g);accel_y (g);accel_z (g);gyro_x (rad/s);gyro_y (rad/s);gyro_z (rad/s);q1;q2;q3;q4"
@@ -27,6 +28,12 @@ class IMUAgent(AbstractHWAgent):
         self.com_port = ""
         self.ser = None
         self.output_file_header = HEADER
+
+    def _get_device_name(self):
+        return Devices.IMU
+
+    def _agent_process_manager_message(self, msg):
+        pass
 
     def _agent_config(self):
         """
@@ -96,10 +103,10 @@ class IMUAgent(AbstractHWAgent):
                     if self.write_data.is_set():
                         self.dq_formatted_data.append(data_line)
                 else:
-                    self.hw_state = HWStatus.ERROR
+                    self.hw_state = __States.ERROR
                     self.logger.exception("Error al leer del acelerómetro vía puerto serial")
             except Exception:
-                self.hw_state = HWStatus.ERROR
+                self.hw_state = __States.ERROR
                 self.logger.exception("Error al leer del acelerómetro vía puerto serial")
 
     def _pre_capture_file_update(self):

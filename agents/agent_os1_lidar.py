@@ -1,5 +1,3 @@
-import logging
-from pathlib import Path
 import json
 import logging
 import socket
@@ -10,11 +8,12 @@ import os
 import errno
 import numpy as np
 import sys
-import init_agent  # Inserta la carpeta agents en el path del sistema
+
+from hwagent.devices import HWStates, Devices
 from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack
-from hwagent.abstract_agent import AbstractHWAgent, HWStatus, DEFAULT_CONFIG_FILE
+from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 CONFIG_FILE = "config.yaml"
 LIDAR_UDP_PORT = 7502
@@ -42,6 +41,12 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_valid = 0
         self.blocks_invalid = 0
         self.active_channels = ()
+
+    def _get_device_name(self):
+        return Devices.OS1_LIDAR
+
+    def _agent_process_manager_message(self, msg):
+        pass
 
     def _agent_config(self):
         """
@@ -185,9 +190,9 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_valid, self.blocks_invalid = 0, 0
 
         if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStatus.WARNING
+            self.hw_state.state = HWStates.WARNING
         else:
-            self.hw_state = HWStatus.NOMINAL
+            self.hw_state.state = HWStates.NOMINAL
 
 
 if __name__ == "__main__":

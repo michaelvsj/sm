@@ -2,7 +2,8 @@ import socket
 import time
 from pathlib import Path
 import yaml
-from hwagent.abstract_agent import AgentStatus, Message, HWStatus
+from hwagent.abstract_agent import AgentStatus, Message
+from devices import Devices, HWStates
 from threading import Thread
 
 Path('logs').mkdir(exist_ok=True)
@@ -55,7 +56,7 @@ if "gps" in my_socks.keys():
 if "os_lidar" in my_socks.keys():
     agent_ready = False
     while not agent_ready:
-        my_socks["os1_lidar"]["socket"].sendall(Message(Message.QUERY_AGENT_STATE).serialize())
+        my_socks["os1_lidar"]["socket"].sendall(Message.cmd_query_agent_state().serialize())
         rep = yaml.safe_load(my_socks["os1_lidar"]["socket"].recv(1024).decode('ascii'))
         if rep['arg'] == AgentStatus.STAND_BY:
             agent_ready = True
@@ -66,36 +67,20 @@ if "os_lidar" in my_socks.keys():
 
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
-msg = Message(Message.SET_FOLDER, _dir).serialize()
+msg = Message.set_folder(_dir).serialize()
 send_to_all_agents(msg)
 
-msg = Message(Message.START_CAPTURE).serialize()
+msg = Message.cmd_start_capture().serialize()
 send_to_all_agents(msg)
 
 for i in range(1, 20):
     time.sleep(5)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)
-    msg = Message(Message.SET_FOLDER, _dir).serialize()
+    msg = Message.set_folder(_dir).serialize()
     send_to_all_agents(msg)
 
 time.sleep(1)
-msg = Message(Message.END_CAPTURE).serialize()
+msg = Message.cmd_end_capture().serialize()
 send_to_all_agents(msg)
 time.sleep(1)
-
-"""
-_dir = f'/home/mich/temp/capture/000'
-Path(_dir).mkdir(parents=True, exist_ok=True)
-sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
-sock.sendall(Message(Message.START_CAPTURE).serialize())
-for i in range(1, 5):
-    time.sleep(3)
-    _dir = f'/home/mich/temp/capture/{i:03d}'
-    Path(_dir).mkdir(parents=True, exist_ok=True)
-    sock.sendall(Message(Message.SET_FOLDER, _dir).serialize())
-
-time.sleep(3)
-sock.sendall(Message(Message.END_CAPTURE).serialize())
-time.sleep(2)
-"""

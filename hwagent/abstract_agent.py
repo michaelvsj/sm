@@ -1,56 +1,19 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from os import path
 import sys
 import time
-import json
 import os, errno
 import yaml
-from enum import Enum, auto
 import logging, logging.config
 from collections import deque
 import socket
 from threading import Thread, Event
+from messaging.messaging import Message
+from devices import HWStates, Devices
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
 DEFAULT_CONFIG_FILE = 'config.yaml'
-
-class Message:
-    START_CAPTURE = 'START_CAPTURE'
-    END_CAPTURE = 'END_CAPTURE'
-    SET_FOLDER = 'SET_FOLDER'
-    QUERY_AGENT_STATE = 'QUERY_AGENT_STATE'
-    INFORM_AGENT_STATE = 'INFORM_AGENT_STATE'
-    QUERY_HW_STATE = 'QUERY_HW_STATE'
-    INFORM_HW_STATE = 'INFORM_HW_STATE'
-    DATA = 'DATA'
-
-    EOT = b'\x1E'     # Separador de mensajes
-
-    def __init__(self, cmd, arg=''):
-        self.cmd = cmd
-        self.arg = arg
-
-    @classmethod
-    def deserialize(cls, msg):
-        if isinstance(msg, (bytes, bytearray)):
-            msg = msg.decode('ascii')
-        d = dict(yaml.safe_load(msg))
-        return cls(d['cmd'], d['arg'])
-
-    def __eq__(self, other):
-        if isinstance(other, str):
-            return self.cmd == other
-        elif isinstance(other, Message):
-            return self.cmd == other.cmd
-        elif isinstance(other, dict):
-            return self.cmd == other['cmd']
-        else:
-            return False
-
-    def serialize(self):
-        m = yaml.dump({'cmd': self.cmd, 'arg': self.arg}).encode('ascii')
-        return m + self.EOT
 
 
 class AgentStatus:
@@ -63,24 +26,13 @@ class AgentStatus:
     NOT_RESPONDING = 'NOT_RESPONDING'  # Agente no responde. A partir de este estado se puede gatillar un evento para reiniciar el agente
 
 
-class HWStatus:
-    """
-    Contiene los estados (mutuamente excluyentes) posibles de los equipos de hardware
-    En general esto es solo para efectos informativos ya que el mismo agente debe reiniciar o reconectarse en caso de error
-    """
-    NOMINAL = 'NOMINAL'  # Conectado y no se detectan errores
-    WARNING = 'WARNING'  # Conectado pero con algun tipo de problema. E.g. pérdida de datos, coordenada 0, datos fuera de rango, etc. IMplica que sensor está con capacidades operatuvas reducidas
-    ERROR = 'ERROR'  # Conectado pero en estado de error. Implica que el sensor no está operativo.
-    NOT_CONNECTED = 'NOT_CONNECTED'  # No es posible establecer conexión al equipo (No se puede abrir puerto COM, conexión TCP, etc).
-
-
 class AbstractHWAgent(ABC):
     def __init__(self, config_section, config_file=DEFAULT_CONFIG_FILE):
         self.logger = logging.getLogger()
         self.output_file_name = ''
         self.output_folder = ''
         self.state = AgentStatus.STARTING
-        self.hw_state = HWStatus.NOT_CONNECTED
+        self.hw_state = HWStates.NOT_CONNECTED
         self.manager_ip_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
         self.listen_port = 0  # Puerto TCP donde escuchará los comandos
         self.config_file = config_file
@@ -126,7 +78,7 @@ class AbstractHWAgent(ABC):
         attempts = 0
         while attempts < self.hw_connections_retries:
             if self._agent_connect_hw():
-                self.hw_state = HWStatus.NOMINAL
+                self.hw_state.state = HWStates.NOMINAL
                 return True
             else:
                 attempts += 1
@@ -220,7 +172,7 @@ class AbstractHWAgent(ABC):
             pass
 
     def _send_data_to_mgr(self, data):
-        msg = Message(cmd=Message.DATA, arg=data).serialize()
+        msg = Message(_type=Message.DATA, arg=data).serialize()
         self.__manager_send(msg)
 
     def run(self):
@@ -241,21 +193,22 @@ class AbstractHWAgent(ABC):
                 time.sleep(0.01)
                 if len(self.dq_from_mgr):
                     msg = self.dq_from_mgr.pop()
-                    self.logger.info(f"Comando recibido desde manager: {msg.cmd}")
-                    if msg == Message.END_CAPTURE:
+                    self.logger.info(f"Comando recibido desde manager: {msg.typ}")
+                    if msg == Message.CMD_END_CAPTURE:
                         self._agent_stop_streaming()
                         self.state = AgentStatus.STAND_BY
-                    elif msg == Message.START_CAPTURE:
+                    elif msg == Message.CMD_START_CAPTURE:
                         self._agent_start_streaming()
                         self.state = AgentStatus.CAPTURING
-                    elif msg == Message.QUERY_AGENT_STATE:
-                        self.__manager_send(Message(Message.INFORM_AGENT_STATE, self.state).serialize())
-                    elif msg == Message.QUERY_HW_STATE:
-                        self.__manager_send(Message(Message.INFORM_HW_STATE, self.hw_state).serialize())
+                    elif msg == Message.CMD_QUERY_AGENT_STATE:
+                        self.__manager_send(Message.agent_state(self.state).serialize())
+                    elif msg == Message.CMD_QUERY_HW_STATE:
+                        self.__manager_send(Message.device_state(self._get_device_name(), self.hw_state).serialize())
                     elif msg == Message.SET_FOLDER:
                         self.__update_capture_file(msg.arg)
-
-                if self.hw_state == HWStatus.NOT_CONNECTED or self.hw_state == HWStatus.ERROR:
+                    else: # Todos los demás mensajes deben ser procesados por el agente particular
+                        self._agent_process_manager_message(msg)
+                if self.hw_state.state == HWStates.NOT_CONNECTED or self.hw_state.state == HWStates.ERROR:
                     if self.state == AgentStatus.CAPTURING:
                         self.state = AgentStatus.STARTING
                         self._agent_stop_streaming()
@@ -275,6 +228,22 @@ class AbstractHWAgent(ABC):
                 wrt.join(0.5)
             self._agent_finalize()
             self.logger.info("Aplicación terminada")
+
+    @abstractmethod
+    def _get_device_name(self):
+        """
+
+        :return: El identificador del hardware asociado al agente. Debe estar definifo en devices.Devices
+        """
+        pass
+
+    @abstractmethod
+    def _agent_process_manager_message(self, msg: Message):
+        """
+        Procesa los mensajes del manager que son más especificos del agente
+        :return:
+        """
+        pass
 
     @abstractmethod
     def _pre_capture_file_update(self):
