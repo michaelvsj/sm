@@ -26,8 +26,6 @@ class GPSAgent(AbstractHWAgent):
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
-        self.write_data = Event()
-        self.write_data.clear()
         self.com_port = ""
         self.baudrate = ""
         self.ser = serial.Serial()
@@ -57,7 +55,7 @@ class GPSAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data())
+        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data)
         self.sensor_data_receiver.start()
 
     def _agent_finalize(self):
@@ -77,18 +75,15 @@ class GPSAgent(AbstractHWAgent):
         """
         Inicia stream de datos desde el sensor
         """
-        self.write_data.set()
-        pass
+        self.state = AgentStatus.CAPTURING
 
     def _agent_stop_streaming(self):
         """
         Detiene el stream de datos desde el sensor
         """
-        self.write_data.clear()
-        pass
+        self.state = AgentStatus.STAND_BY
 
     def _agent_connect_hw(self):
-        self.write_data.clear()
         self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
         if isinstance(self.ser, serial.Serial) and self.ser.is_open:
             return True
@@ -112,7 +107,7 @@ class GPSAgent(AbstractHWAgent):
             if r:
                 if self.__update_data():
                     self._send_data_to_mgr(self.datapoint)
-                    if self.write_data.is_set():
+                    if self.state == AgentStatus.CAPTURING:
                         self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
 
     def __read_from_simulator(self):
