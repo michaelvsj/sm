@@ -103,6 +103,9 @@ class Yost3SpaceAPI():
         packet = build_packet(command, interval_us + duration_us + delay_us, False)
         self.ser.write(packet)
 
+    def disconnect(self):
+        self.ser.close()
+
     def read_datapoint(self):
         while not self.streaming:
             time.sleep(1/self.sample_rate)

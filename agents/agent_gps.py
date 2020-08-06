@@ -11,7 +11,7 @@ import serial
 from pyproj import Geod
 
 import init_agent
-from devices import Devices, HWStates
+from constants import Devices, HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]

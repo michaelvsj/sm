@@ -9,7 +9,7 @@ import serial
 
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
-from devices import Devices, HWStates
+from constants import Devices, HWStates, AgentStatus
 
 DEFAULT_COM_PORT = '/dev/ttyARD0'
 DEFAULT_BAUDRATE = 115200

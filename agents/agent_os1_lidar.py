@@ -9,7 +9,7 @@ import errno
 import numpy as np
 import sys
 
-from hwagent.devices import HWStates, Devices
+from hwagent.constants import HWStates, Devices, AgentStatus
 from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack
@@ -190,9 +190,9 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_valid, self.blocks_invalid = 0, 0
 
         if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state.state = HWStates.WARNING
+            self.hw_state = HWStates.WARNING
         else:
-            self.hw_state.state = HWStates.NOMINAL
+            self.hw_state = HWStates.NOMINAL
 
 
 if __name__ == "__main__":

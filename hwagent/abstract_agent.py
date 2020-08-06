@@ -9,21 +9,11 @@ from collections import deque
 import socket
 from threading import Thread, Event
 from messaging.messaging import Message
-from devices import HWStates, Devices
+from constants import HWStates, Devices, AgentStatus
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
 DEFAULT_CONFIG_FILE = 'config.yaml'
-
-
-class AgentStatus:
-    """
-    Contiene los estados (mutuamente excluyentes) posibles de los agentes
-    """
-    STARTING = 'STARTING'  # Iniciando o re-iniciando. En este último caso, presumiblemente porque se produjo un error y está reconectandose al hardware
-    STAND_BY = 'STAND_BY'  # Listo para capturar
-    CAPTURING = 'CAPTURING'  # Capturando
-    NOT_RESPONDING = 'NOT_RESPONDING'  # Agente no responde. A partir de este estado se puede gatillar un evento para reiniciar el agente
 
 
 class AbstractHWAgent(ABC):
@@ -78,7 +68,7 @@ class AbstractHWAgent(ABC):
         attempts = 0
         while attempts < self.hw_connections_retries:
             if self._agent_connect_hw():
-                self.hw_state.state = HWStates.NOMINAL
+                self.hw_state = HWStates.NOMINAL
                 return True
             else:
                 attempts += 1
@@ -123,7 +113,10 @@ class AbstractHWAgent(ABC):
                     and len(self.dq_formatted_data) \
                     and not self.output_file.closed:
                 try:
-                    self.output_file.write(self.dq_formatted_data.popleft() + os.linesep)
+                    if self.output_file_is_binary:
+                        self.output_file.write(self.dq_formatted_data.popleft())
+                    else:
+                        self.output_file.write(self.dq_formatted_data.popleft() + os.linesep)
                 except ValueError:  # Archivo se cerró entremedio
                     pass
             else:
@@ -153,14 +146,14 @@ class AbstractHWAgent(ABC):
         while not self.flag_quit.is_set():
             try:
                 bt = self.connection.recv(1)
-                if bt == Message.EOT:
-                    self.dq_from_mgr.appendleft(Message.deserialize(cmd))
-                    cmd = b''
-                elif bt != Message.EOT:
-                    cmd += bt
-                elif not cmd:  # Se cerró la conexion
+                if not bt:
                     self.logger.warning(f"Conexión cerrada por manager")
                     self.__manager_connect()  # Intenta reconexión
+                elif bt == Message.EOT:
+                    self.dq_from_mgr.appendleft(Message.deserialize(cmd))
+                    cmd = b''
+                else:
+                    cmd += bt
             except TimeoutError:
                 pass
         self.connection.close()
@@ -193,22 +186,22 @@ class AbstractHWAgent(ABC):
                 time.sleep(0.01)
                 if len(self.dq_from_mgr):
                     msg = self.dq_from_mgr.pop()
-                    self.logger.info(f"Comando recibido desde manager: {msg.typ}")
-                    if msg == Message.CMD_END_CAPTURE:
+                    self.logger.info(f"Comando recibido desde manager: {msg.typ}, {msg.arg}")
+                    if msg.arg == Message.CMD_END_CAPTURE:
                         self._agent_stop_streaming()
                         self.state = AgentStatus.STAND_BY
-                    elif msg == Message.CMD_START_CAPTURE:
+                    elif msg.arg == Message.CMD_START_CAPTURE:
                         self._agent_start_streaming()
                         self.state = AgentStatus.CAPTURING
-                    elif msg == Message.CMD_QUERY_AGENT_STATE:
+                    elif msg.arg == Message.CMD_QUERY_AGENT_STATE:
                         self.__manager_send(Message.agent_state(self.state).serialize())
-                    elif msg == Message.CMD_QUERY_HW_STATE:
+                    elif msg.arg == Message.CMD_QUERY_HW_STATE:
                         self.__manager_send(Message.device_state(self._get_device_name(), self.hw_state).serialize())
-                    elif msg == Message.SET_FOLDER:
+                    elif msg.typ == Message.SET_FOLDER:
                         self.__update_capture_file(msg.arg)
                     else: # Todos los demás mensajes deben ser procesados por el agente particular
                         self._agent_process_manager_message(msg)
-                if self.hw_state.state == HWStates.NOT_CONNECTED or self.hw_state.state == HWStates.ERROR:
+                if self.hw_state == HWStates.NOT_CONNECTED or self.hw_state == HWStates.ERROR:
                     if self.state == AgentStatus.CAPTURING:
                         self.state = AgentStatus.STARTING
                         self._agent_stop_streaming()
@@ -227,6 +220,8 @@ class AbstractHWAgent(ABC):
             if wrt.is_alive():
                 wrt.join(0.5)
             self._agent_finalize()
+            self.connection.close()
+            self.__sock.close()
             self.logger.info("Aplicación terminada")
 
     @abstractmethod

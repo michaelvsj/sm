@@ -10,8 +10,8 @@ from threading import Thread, Event
 import serial
 
 import init_agent
-from devices import Devices
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE, __States
+from constants import Devices, AgentStatus, HWStates
+from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from yost3space.api import Yost3SpaceAPI, READ_TIMEOUT, BAUD_RATE, unpack
 
 HEADER = "system_time (s);accel_x (g);accel_y (g);accel_z (g);gyro_x (rad/s);gyro_y (rad/s);gyro_z (rad/s);q1;q2;q3;q4"
@@ -62,8 +62,9 @@ class IMUAgent(AbstractHWAgent):
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
         self.sensor_data_receiver.join(0.1)
+        self.yost_api.disconnect()
         self.yost_api = None
-        self.ser.close()
+
 
     def _agent_start_streaming(self):
         """
@@ -91,7 +92,7 @@ class IMUAgent(AbstractHWAgent):
             return False
 
     def _agent_reset_hw_connection(self):
-        self.ser.close()
+        self.yost_api.disconnect()
         self._agent_connect_hw()
 
     def __receive_and_pipe_data(self):
@@ -103,10 +104,10 @@ class IMUAgent(AbstractHWAgent):
                     if self.write_data.is_set():
                         self.dq_formatted_data.append(data_line)
                 else:
-                    self.hw_state = __States.ERROR
+                    self.hw_state = HWStates.ERROR
                     self.logger.exception("Error al leer del acelerómetro vía puerto serial")
             except Exception:
-                self.hw_state = __States.ERROR
+                self.hw_state = HWStates.ERROR
                 self.logger.exception("Error al leer del acelerómetro vía puerto serial")
 
     def _pre_capture_file_update(self):

@@ -9,7 +9,7 @@ import subprocess
 
 import init_agent
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from hwagent.devices import Devices, HWStates
+from hwagent.constants import Devices, HWStates, AgentStatus
 
 IMAGES_FOLDER = "img"
 
