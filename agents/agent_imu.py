@@ -48,8 +48,8 @@ class IMUAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data)
-        self.sensor_data_receiver.start()
+        self.__main_thread = Thread(target=self.__receive_and_pipe_data)
+        self.__main_thread.start()
 
     def _agent_finalize(self):
         """
@@ -61,25 +61,9 @@ class IMUAgent(AbstractHWAgent):
             assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
-        self.sensor_data_receiver.join(0.1)
+        self.__main_thread.join(0.1)
         self.yost_api.disconnect()
         self.yost_api = None
-
-
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
-        self.yost_api.start_streaming()
-        self.write_data.set()
-
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.yost_api.stop_streaming()
-        self.write_data.clear()
 
     def _agent_connect_hw(self):
         self.write_data.clear()
@@ -96,12 +80,14 @@ class IMUAgent(AbstractHWAgent):
         self._agent_connect_hw()
 
     def __receive_and_pipe_data(self):
+        self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
+        self.yost_api.start_streaming()
         while not self.flag_quit.is_set():
             try:
                 data = self.yost_api.read_datapoint()
                 if data:
                     data_line = f"{time.time():.3f}; {';'.join([format(v, '2.3f') for v in data])}"
-                    if self.write_data.is_set():
+                    if self.state == AgentStatus.CAPTURING:
                         self.dq_formatted_data.append(data_line)
                 else:
                     self.hw_state = HWStates.ERROR
@@ -109,17 +95,13 @@ class IMUAgent(AbstractHWAgent):
             except Exception:
                 self.hw_state = HWStates.ERROR
                 self.logger.exception("Error al leer del acelerómetro vía puerto serial")
+        try:
+            self.yost_api.stop_streaming()
+        except:
+            pass
 
     def _pre_capture_file_update(self):
         pass
-        # TODO: setear estatus según estadísticas de paquetes. Esto tambien se puede hacer en un thread que corra cada 1 segundo o algo así
-        """Ejemplo: 
-        if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStatus.WARNING
-        else:
-            self.hw_state = HWStatus.NOMINAL
-        """
-
 
 
 if __name__ == "__main__":

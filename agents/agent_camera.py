@@ -43,8 +43,8 @@ class CameraAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.sensor_data_receiver = Thread(target=self.__capture_image)
-        self.sensor_data_receiver.start()
+        self.__image_cap_thread = Thread(target=self.__capture_image)
+        self.__image_cap_thread.start()
 
     def _agent_finalize(self):
         """
@@ -56,44 +56,34 @@ class CameraAgent(AbstractHWAgent):
             assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
-        self.sensor_data_receiver.join(1.1)
+        self.__image_cap_thread.join(self.period + 0.5)
 
-
-    def _agent_start_streaming(self):
+    def _agent_start_capture(self):
         """
         Inicia stream de datos desde el sensor
         """
-        self.write_data.set()
-        pass
-
-    def _agent_stop_streaming(self):
+        self.state = AgentStatus.CAPTURING
+        
+    def _agent_stop_capture(self):
         """
         Detiene el stream de datos desde el sensor
         """
-        self.write_data.clear()
-        pass
+        self.state = AgentStatus.STAND_BY
 
     def _agent_connect_hw(self):
+        # Todo: verificar que cámara esté conectada
         self.hw_state = HWStates.NOMINAL
         return True
 
     def _agent_reset_hw_connection(self):
-        pass
-
+        self._agent_connect_hw()
 
     def _pre_capture_file_update(self):
         pass
-        # TODO: setear estatus según estadísticas de paquetes. Esto tambien se puede hacer en un thread que corra cada 1 segundo o algo así
-        """Ejemplo: 
-        if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStatus.WARNING
-        else:
-            self.hw_state = HWStatus.NOMINAL
-        """
 
     def __capture_image(self):
         while not self.flag_quit.is_set():
-            if not self.output_folder or not self.write_data.is_set() or self.hw_state == HWStates.NOT_CONNECTED:
+            if not self.output_folder or not self.state == AgentStatus.CAPTURING or self.hw_state == HWStates.NOT_CONNECTED:
                 time.sleep(0.1)
                 continue
             command_time = time.time()

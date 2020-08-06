@@ -1,46 +1,20 @@
 """
-La máquina de estados cambia de estado al ocurrir un evento (¿ y/o un cambio de estado en uno de los agentes? )
+Por defecto usa las configuraciones config.yml de la carpeta actual
+y agents/config.yml para conocer las direcciones IP de los agentes
+Estas configs se pueden pisar pasandoselas como argumento de ejecución (en el mismo orden),
+por ejemplo para efectos de testing
 """
 
-from threading import Thread, Event
-from enum import Enum, auto
+from manager import FRAICAPManager, DEFAULT_CONFIG_FILE
+import sys
 
-class Events:
-    """
-    Contiene los eventos relevantes para controlar el flujo de captura
-    """
-    def __init__(self):
-        self.vehicle_stopped = Event()  # El vehículo se detuvo. CUIDADO: Solo debe setearse cuando GPS tenga señal. No confundir v=0 real por v=0 porque no hay señal
-        self.vehicle_resumed = Event()  # El vehículo comenzó a moverse denuevo
-        self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
-        self.segment_ended = Event()    # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
-        self.button_pressed = Event()   # El usuario presionó el boton de inicio/fin de captura
-
-class States(Enum):
-    """
-    Contiene los estados en que puede estar la máquina de estados que coordina la captura
-    """
-    STARTING = auto()
-    STAND_BY = auto()
-    CAPTURING = auto()
-    PAUSED = auto()
-
-
-
-class StateMachine:
-
-    def __init__(self):
-        self.events = Events()
-        self.state = States.STARTING
-        self.initialize()
-
-    def initialize(self):
-        """
-        Lenanta los agentes
-        Levanta los threads de monitoreo de agentes
-
-        :return:
-        """
-
-    def run(self):
-        pass
+if __name__ == "__main__":
+    manager_config_file = "config.yaml"
+    agents_config_file = "agents/config.yml"
+    if len(sys.argv) > 1:
+        manager_config_file = sys.argv[1]
+    if len(sys.argv) > 2:
+        agents_config_file = sys.argv[2]
+    manager = FRAICAPManager()
+    manager.read_config(manager_config_file, agents_config_file)
+    manager.run()

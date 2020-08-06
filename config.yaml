@@ -1,16 +1,18 @@
-manager:
-  ip: 127.0.0.1
-  port: 0
-
-agents:
-  os1_lidar:
-    enabled: true
-    ip: 127.0.0.1
-    port: 30001
-  os1_imu:
-    enabled: true
-    ip: 127.0.0.1
-    port: 30002
+use_agents:
+  agent_imu: True
+  agent_gps: True
+  agent_camera: True
+  agent_os1_lidar: True
+  agent_os1_imu: True
+capture:
+  output_path: /mnt/data/capture
+  splitting_distance: 50 #metros
+  splitting_time: 20 #segundos. Tiempo máximo antes de subdividir una captura. Generalmente se gatilla cuando GPS falla (o si vehículo va muy lento)
+  pause_speed: 0.5 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
+  resume_speed: 3 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
+sqlite:
+  db_file: /home/frai/sw/fraicap.sqlite
+  db_table: tramos
 
 logging:
   version: 1

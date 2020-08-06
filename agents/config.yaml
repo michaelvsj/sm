@@ -40,6 +40,19 @@ agent_imu:
   sample_rate: 200 #Hz
   usb_id: 2476:1010
   com_port: /dev/ttyACM2
+  buttons:
+    bNoButton: 0, 4.99
+    bSingleButton: 0, 0
+    b<: 3.82, 0.40
+    b+: 3.82, 1.46
+    b>: 3.82, 0.93
+    b-: 1.19, 3.83
+    bMute: 3.82, 0.67
+    bPickup: 2.76, 3.82
+    bGPS: 3.82, 2.51
+    bHangup: 2.23, 3.83
+    bStop: 1.98, 3.83
+    bM: 1.72, 3.83
 agent_atmega:
   manager_port: 0
   local_port: 30006

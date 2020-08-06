@@ -71,18 +71,6 @@ class GPSAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(1.1)
         self.ser.close()
 
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.state = AgentStatus.CAPTURING
-
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.state = AgentStatus.STAND_BY
-
     def _agent_connect_hw(self):
         self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
         if isinstance(self.ser, serial.Serial) and self.ser.is_open:

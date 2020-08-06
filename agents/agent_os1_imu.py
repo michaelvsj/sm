@@ -24,8 +24,6 @@ class OS1IMUAgent(AbstractHWAgent):
                                   "accel_y_(g);accel_z_(g);gyro_x_(deg/sec);gyro_y_(deg/sec);gyro_z_(deg/sec)"
         self.sensor_ip = ""
         self.host_ip = ""
-        self.receive_data = Event()
-        self.receive_data.clear()
 
     def _get_device_name(self):
         return Devices.OS1_IMU
@@ -62,22 +60,7 @@ class OS1IMUAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.receive_data.set()
-        pass
-
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.receive_data.clear()
-        pass
-
     def _agent_connect_hw(self):
-        self.receive_data.clear()
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -97,7 +80,7 @@ class OS1IMUAgent(AbstractHWAgent):
     def __read_from_imu(self):
         while not self.flag_quit.is_set():
             packet, address = self.sock.recvfrom(PACKET_SIZE)
-            if not self.receive_data.is_set():
+            if not self.state == AgentStatus.CAPTURING:
                 continue
             if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
                 ti, ta, tg, ax, ay, az, gx, gy, gz = unpack_imu(packet)
@@ -105,16 +88,8 @@ class OS1IMUAgent(AbstractHWAgent):
                          f"{ax:.3f};{ay:.3f};{az:.3f};{gx:.3f};{gy:.3f};{gz:.3f}"
                 self.dq_formatted_data.append(f_data)
 
-
     def _pre_capture_file_update(self):
         pass
-        # TODO: setear estatus según estadísticas de paquetes. Esto tambien se puede hacer en un thread que corra cada 1 segundo o algo así
-        """Ejemplo: 
-        if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStatus.WARNING
-        else:
-            self.hw_state = HWStatus.NOMINAL
-        """
 
 
 if __name__ == "__main__":

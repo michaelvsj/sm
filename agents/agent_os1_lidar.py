@@ -77,24 +77,7 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.receive_data.set()
-        pass
-
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.receive_data.clear()
-        self.packets_per_frame = dict()  # resetea datos de estadística
-        pass
-
     def _agent_connect_hw(self):
-        self.receive_data.clear()
-
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -138,7 +121,7 @@ class OS1LiDARAgent(AbstractHWAgent):
 
         while not self.flag_quit.is_set():
             packet, address = self.sock.recvfrom(PACKET_SIZE)
-            if not self.receive_data.is_set():
+            if not self.state == AgentStatus.CAPTURING:
                 continue
             if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
                 first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")

@@ -25,13 +25,13 @@ class TestAgent(AbstractHWAgent):
         """
         pass
 
-    def _agent_start_streaming(self):
+    def _agent_start_capture(self):
         """
         Inicia stream de datos desde el sensor
         """
         pass
 
-    def _agent_stop_streaming(self):
+    def _agent_stop_capture(self):
         """
         Detiene el stream de datos desde el sensor
         """

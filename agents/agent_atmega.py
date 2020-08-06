@@ -3,13 +3,15 @@ import os
 import sys
 import time
 from pathlib import Path
-from threading import Thread, Event
-from collections import deque
+from queue import Queue
+from threading import Thread
+
 import serial
 
+import init_agent
+from constants import Devices, HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
-from constants import Devices, HWStates, AgentStatus
 
 DEFAULT_COM_PORT = '/dev/ttyARD0'
 DEFAULT_BAUDRATE = 115200
@@ -33,16 +35,14 @@ ADC_VALUE_TO_VOLTS = 5.0 / 1023.0
 
 BUTTONS = ('bNoButton', 'bSingleButton', 'b+', 'b-', 'b<', 'b>', 'bMute', 'bGPS', 'bStop', 'bPickup', 'bHangup', 'bM')
 
+
 class AtmegaAgent(AbstractHWAgent):
     def __init__(self, config_file):
         self.agent_name = os.path.basename(__file__).split(".")[0]
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
-        self.write_data = Event()
-        self.write_data.clear()
-        self.q_buttons: Queue = _but_queue  # TODO encolar botonoes como mensajes para manager
-        self.d_volts = deque()  # Cola para almacenar voltajes leidos
+        self.q_volts = Queue()  # Cola para almacenar voltajes leidos
         self.com_port = ""
         self.baudrate = ""
         self.ser = None
@@ -63,6 +63,11 @@ class AtmegaAgent(AbstractHWAgent):
         """
         self.com_port = self.config["com_port"]
         self.baudrate = self.config["baudrate"]
+        try:
+            for but_name in BUTTONS:
+                self.keys[but_name] = tuple([float(n) for n in self.config['buttons'][but_name].split(",")])
+        except KeyError:
+            self.logger.error(f"Botón {but_name} no está definido en la configuación")
 
     def _agent_run_data_threads(self):
         """
@@ -84,24 +89,10 @@ class AtmegaAgent(AbstractHWAgent):
             assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
-        self.__agent_main_thread.join(0.1)
+        self.__agent_main_thread.join(0.2)
         self.ser.close()
 
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
-        self.write_data.set()
-
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.write_data.clear()
-
     def _agent_connect_hw(self):
-        self.write_data.clear()
         self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
         if isinstance(self.ser, serial.Serial) and self.ser.is_open:
             return True
@@ -117,6 +108,7 @@ class AtmegaAgent(AbstractHWAgent):
         self._agent_connect_hw()
 
     def __main_loop(self):
+        self.state = AgentStatus.STAND_BY
         self.__turn_off_leds_now()
         while not self.flag_quit.is_set():
             try:
@@ -127,25 +119,16 @@ class AtmegaAgent(AbstractHWAgent):
                 # Lee datos:
                 v1 = int.from_bytes(self.ser.read(2), byteorder='little', signed=True) * ADC_VALUE_TO_VOLTS
                 v2 = int.from_bytes(self.ser.read(2), byteorder='little', signed=True) * ADC_VALUE_TO_VOLTS
-                self.d_volts.appendleft([v1, v2])
+                self.q_volts.put([v1, v2])
             except TimeoutError:
                 self.logger.warning("Tiemout leyendo del puerto serial conectado a CPU ATMega")
                 continue
             except KeyboardInterrupt:  # Apaga los leds
-                self.__turn_off_leds_now()
+                self.flag_quit.set()
             except Exception as e:
-                raise
+                self.logger.exception("")
+                self.flag_quit.set()
         self.__turn_off_leds_now()
-
-    def _pre_capture_file_update(self):
-        pass
-        # TODO: setear estatus según estadísticas de paquetes. Esto tambien se puede hacer en un thread que corra cada 1 segundo o algo así
-        """Ejemplo: 
-        if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStatus.WARNING
-        else:
-            self.hw_state = HWStatus.NOMINAL
-        """
 
     def __ping_button_feedback(self):
         """
@@ -171,11 +154,11 @@ class AtmegaAgent(AbstractHWAgent):
         unpressed = True  # Inicia sin boton presionado
         while not self.flag_quit.is_set():
             time.sleep(0.002)
-            prev_volts = self.d_volts.pop()
+            prev_volts = self.q_volts.get()
             stability_count = -1
             while stability_count < 3:
                 time.sleep(0.002)
-                volts = self.d_volts.pop()
+                volts = self.q_volts.get()
                 stability_count += 1
                 for val1, val2 in zip(volts, prev_volts):
                     if abs(val1 - val2) > STABILITY_THRESHOLD:
@@ -193,10 +176,10 @@ class AtmegaAgent(AbstractHWAgent):
                 if button == 'bNoButton':  # No va a registrar otro boton hasta que no pase por estado de ningun boton presionado
                     unpressed = True
                 elif unpressed:
-                    unpressed = False
-                    self.logger.debug(f"Boton {button} detectado")
-                    self.q_buttons.put(button)
                     self.__ping_button_feedback()
+                    unpressed = False
+                    self._send_data_to_mgr(button)
+                    self.logger.debug(f"Boton {button} detectado")
 
     def _agent_process_manager_message(self, msg: Message):
         #LEDs de estado de sistema
@@ -241,6 +224,15 @@ class AtmegaAgent(AbstractHWAgent):
         self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + OFF)
         for led in self.devices_leds.values():
             self.ser.write(START_OF_TEXT + led + OFF)
+
+    def _agent_start_capture(self):
+        pass
+
+    def _agent_stop_capture(self):
+        pass
+
+    def _pre_capture_file_update(self):
+        pass
 
 
 if __name__ == "__main__":

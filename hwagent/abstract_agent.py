@@ -188,10 +188,8 @@ class AbstractHWAgent(ABC):
                     msg = self.dq_from_mgr.pop()
                     self.logger.info(f"Comando recibido desde manager: {msg.typ}, {msg.arg}")
                     if msg.arg == Message.CMD_END_CAPTURE:
-                        self._agent_stop_streaming()
                         self.state = AgentStatus.STAND_BY
                     elif msg.arg == Message.CMD_START_CAPTURE:
-                        self._agent_start_streaming()
                         self.state = AgentStatus.CAPTURING
                     elif msg.arg == Message.CMD_QUERY_AGENT_STATE:
                         self.__manager_send(Message.agent_state(self.state).serialize())
@@ -199,14 +197,13 @@ class AbstractHWAgent(ABC):
                         self.__manager_send(Message.device_state(self._get_device_name(), self.hw_state).serialize())
                     elif msg.typ == Message.SET_FOLDER:
                         self.__update_capture_file(msg.arg)
-                    else: # Todos los demás mensajes deben ser procesados por el agente particular
+                    else:  # Todos los demás mensajes deben ser procesados por el agente particular
                         self._agent_process_manager_message(msg)
                 if self.hw_state == HWStates.NOT_CONNECTED or self.hw_state == HWStates.ERROR:
                     if self.state == AgentStatus.CAPTURING:
                         self.state = AgentStatus.STARTING
-                        self._agent_stop_streaming()
                         self._agent_reset_hw_connection()
-                        self._agent_start_streaming()
+                        self.state = AgentStatus.CAPTURING
                     elif self.state == AgentStatus.STAND_BY:
                         self.state = AgentStatus.STARTING
                         self._agent_reset_hw_connection()
@@ -270,20 +267,6 @@ class AbstractHWAgent(ABC):
         """
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
-        """
-        pass
-
-    @abstractmethod
-    def _agent_start_streaming(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        pass
-
-    @abstractmethod
-    def _agent_stop_streaming(self):
-        """
-        Detiene el stream de datos desde el sensor
         """
         pass
 
