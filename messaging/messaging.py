@@ -38,6 +38,9 @@ class Message:
         self.typ = _type
         self.arg = arg
 
+    def __str__(self):
+        return f"typ: {self.typ}, arg: {self.arg}"
+
     @classmethod
     def deserialize(cls, msg):
         if isinstance(msg, (bytes, bytearray)):

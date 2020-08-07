@@ -1,11 +1,14 @@
 """
 La máquina de estados cambia de estado al ocurrir un evento (¿ y/o un cambio de estado en uno de los agentes? )
 """
+import time
+from subprocess import Popen
+
 import yaml
 import sys
 from threading import Thread, Event
 from enum import Enum, auto
-import logging,  logging.config
+import logging, logging.config
 import os
 from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
@@ -16,16 +19,18 @@ DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
 AGENT_NAMES = ("os1_lidar", "os1_imu", "imu", "gps", "camera", "atmega", "inet")
 
+
 class Events:
     """
     Contiene los eventos relevantes para controlar el flujo de captura
     """
+
     def __init__(self):
         self.vehicle_stopped = Event()  # El vehículo se detuvo. CUIDADO: Solo debe setearse cuando GPS tenga señal. No confundir v=0 real por v=0 porque no hay señal
         self.vehicle_resumed = Event()  # El vehículo comenzó a moverse denuevo
         self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
-        self.segment_ended = Event()    # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
-        self.button_pressed = Event()   # El usuario presionó el boton de inicio/fin de captura
+        self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
+        self.button_pressed = Event()  # El usuario presionó el boton de inicio/fin de captura
 
 
 class States(Enum):
@@ -38,19 +43,19 @@ class States(Enum):
     PAUSED = auto()
 
 
-
 class FRAICAPManager:
 
-    def __init__(self):
+    def __init__(self, manager_config_file, agents_config_file):
         self.flag_quit = Event()
         self.events = Events()
         self.state = States.STARTING
-        self.initialize()
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger("manager")
         self.capture_dir_base = ""
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
         self.agents = dict()
         self.dbi = None
+        self.set_up(manager_config_file, agents_config_file)
+        self.initialize()
 
     def set_up(self, manager_config_file, agents_config_file):
         try:
@@ -69,10 +74,15 @@ class FRAICAPManager:
         for agt in AGENT_NAMES:
             try:
                 assert isinstance(self.mgr_cfg['use_agents'][agt], bool)
-                self.agents[agt] = AgentInterface(LOCALHOST, agents_cfg[f"agent_{agt}"]["local_port"])
-                if self.mgr_cfg["use_agents"][agt]:
-                    self.agents[agt].enabled = True
-                else:
+                try:
+                    self.agents[agt] = AgentInterface(LOCALHOST, agents_cfg[f"agent_{agt}"]["local_port"])
+                    if self.mgr_cfg["use_agents"][agt]:
+                        self.agents[agt].enabled = True
+                    else:
+                        self.agents[agt].enabled = False
+                except KeyError:
+                    self.logger.warning(f"No hay configuración para el agente agent_{agt} en {agents_config_file}")
+                    self.agents[agt] = AgentInterface('', '')
                     self.agents[agt].enabled = False
             except AssertionError as e:
                 self.logger.error("Error en configuracion. Parámetro 'use_agents' debe ser True o False")
@@ -96,11 +106,29 @@ class FRAICAPManager:
 
         :return:
         """
-
+        if os.name == 'posix':
+            python_exec = os.path.join(sys.exec_prefix, 'bin', 'python')
+        elif os.name == 'nt':
+            python_exec = os.path.join(sys.exec_prefix, 'Scripts', 'pythonw.exe')
+        else:
+            self.logger.error("No se pudo determinar sistema operativo")
+            sys.exit(1)
+        agents_working_dir = os.path.dirname(os.path.abspath(__file__)) + os.sep + "agents"
         for agt in AGENT_NAMES:
             if self.agents[agt].enabled:
-                self.agents[agt].connect
-
+                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt}.py"]).pid
+                self.logger.info(f"Agente {agt} ejecutandose con PID {pid}")
+                self.agents[agt].connect()
 
     def run(self):
-        pass
+        while True:
+            for agent in self.agents.values():
+                if agent.is_connected():
+                    agent.send_msg(Message.cmd_query_agent_state())
+            time.sleep(1)
+            for name, agent in self.agents.items():
+                if agent.is_connected():
+                    msg = agent.get_msg()
+                    print(f"Agent {name}. Message: {msg}")
+            time.sleep(5)
+

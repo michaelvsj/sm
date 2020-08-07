@@ -60,6 +60,11 @@ agent_atmega:
   hw_connection_retries: 5
   com_port: /dev/ttyARD0
   baudrate: 115200
+#agent_inet:
+#  manager_port: 0
+#  local_port: 30007
+#  output_file_name:
+#  hw_connection_retries: 1000
 
 
 logging:
