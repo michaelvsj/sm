@@ -9,7 +9,7 @@ from threading import Thread
 import serial
 
 import init_agent
-from constants import Devices, HWStates, AgentStatus
+from constants import HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
 

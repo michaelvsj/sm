@@ -3,8 +3,8 @@ import time
 from threading import Thread
 import logging
 from queue import SimpleQueue
-from messaging.messaging import Message
-
+from messaging.messaging import Message, AgentStatus
+from constants import HWStates
 
 class AgentInterface:
     def __init__(self, ip_addr, ip_port):
@@ -15,6 +15,8 @@ class AgentInterface:
         self.__sock.setblocking(True)
         self.__connected = False
         self.q_msg_in = SimpleQueue()
+        self.agent_status = AgentStatus.NOT_RESPONDING
+        self.hw_status = HWStates.NOT_CONNECTED
         self.enabled = False
         self.logger = logging.getLogger("AgentInterface")
 
@@ -23,6 +25,16 @@ class AgentInterface:
         ct.start()
         rt = Thread(target=self.__receive, daemon=True)
         rt.start()
+        st = Thread(target=self.__check_state, daemon=True)
+        st.start()
+
+    def __check_state(self):
+        while True:
+            if self.__connected:
+                self.send_msg(Message.cmd_query_agent_state().serialize())
+                time.sleep(1)
+                self.send_msg(Message.cmd_query_hw_state().serialize())
+                time.sleep(1)
 
     def __connect_insist(self):
         error = False
@@ -51,7 +63,13 @@ class AgentInterface:
                         self.logger.warning(f"Conexión cerrada por manager")
                         self.__connect_insist()  # Intenta reconexión
                     elif bt == Message.EOT:
-                        self.q_msg_in.put(Message.deserialize(cmd))
+                        msg = Message.deserialize(cmd)
+                        if msg.typ == Message.AGENT_STATE:
+                            self.agent_status = msg.arg
+                        elif msg.typ == Message.DEVICE_STATE:
+                            self.hw_status = msg.arg
+                        elif msg.typ == Message.DATA:
+                            self.q_msg_in.put(msg.arg)
                         cmd = b''
                     else:
                         cmd += bt

@@ -18,7 +18,8 @@ from agent_interface import AgentInterface
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
 AGENT_NAMES = ("os1_lidar", "os1_imu", "imu", "gps", "camera", "atmega", "inet")
-
+KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
+KEY_START_STOP = ' ' # espacio: para iniciar o detener una sesión de captura
 
 class Events:
     """
@@ -30,8 +31,7 @@ class Events:
         self.vehicle_resumed = Event()  # El vehículo comenzó a moverse denuevo
         self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
         self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
-        self.button_pressed = Event()  # El usuario presionó el boton de inicio/fin de captura
-
+        self.new_command = Event()  # El usuario presionó el boton de inicio/fin de captura o una tecla en consola. Como sea, hay un nuevo comando en la cola de comandos
 
 class States(Enum):
     """
@@ -54,8 +54,8 @@ class FRAICAPManager:
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
         self.agents = dict()
         self.dbi = None
+        self.flag_agents_ready = Event()
         self.set_up(manager_config_file, agents_config_file)
-        self.initialize()
 
     def set_up(self, manager_config_file, agents_config_file):
         try:
@@ -106,6 +106,7 @@ class FRAICAPManager:
 
         :return:
         """
+        self.state = States.STARTING
         if os.name == 'posix':
             python_exec = os.path.join(sys.exec_prefix, 'bin', 'python')
         elif os.name == 'nt':
@@ -120,15 +121,76 @@ class FRAICAPManager:
                 self.logger.info(f"Agente {agt} ejecutandose con PID {pid}")
                 self.agents[agt].connect()
 
-    def run(self):
-        while True:
-            for agent in self.agents.values():
-                if agent.is_connected():
-                    agent.send_msg(Message.cmd_query_agent_state())
-            time.sleep(1)
-            for name, agent in self.agents.items():
-                if agent.is_connected():
-                    msg = agent.get_msg()
-                    print(f"Agent {name}. Message: {msg}")
-            time.sleep(5)
+        # Espera a que agentes se conecten
+        self.logger.info("Esperando conexión a agentes")
+        for name, agt in self.agents.items():
+            if agt.enabled:
+                self.logger.info(f"Conectando a agente {name}")
+                while not agt.is_connected():
+                    time.sleep(0.01)
+                self.logger.info(f"Agente {name} conectado")
+        self.logger.info("Conectado a todos los agentes habilitados")
 
+        self.logger.info("Iniciando thread de reporte de estado de hardware")
+        self.thread_agents_monitor = Thread(target=self.monitor_agents, daemon=True)
+        self.thread_agents_monitor.start()
+
+        self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
+        self.logger.info("Iniciando thread de lectura de teclado")
+
+        self.logger.info("Iniciando thread de lectura de botones")
+
+        self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
+
+        self.logger.info("Iniciando thread de reporte de estado de hardware")
+
+    def monitor_agents(self):
+        while not self.flag_quit:
+            all_ready = True
+            for name, agt in self.agents.items():
+                if agt.enabled:
+                    if agt.agent_status != AgentStatus.STAND_BY or agt.agent_status != AgentStatus.CAPTURING:
+                        all_ready = False
+            if all_ready:
+                self.flag_agents_ready.set()
+            else:
+                self.flag_agents_ready.clear()
+            time.sleep(0.1)
+
+
+    def run(self):
+        self.initialize()
+
+        self.logger.info("Esperando que agentes estén listos para capturar")
+        while not self.flag_agents_ready.is_set():
+            time.sleep(0.1)
+
+        self.logger.info("Esperando eventos")
+
+        #  Aquí se implementa la lógica de alto nivel de la máquina de estados, basada en estados y eventos
+        self.state = States.STAND_BY
+        while not self.flag_quit.is_set():
+            try:
+                if self.events.new_command.is_set():
+                    cmd = self.q_user_commands.get()
+                    if self.q_user_commands.empty():
+                        self.events.new_command.clear()
+                    if cmd == KEY_QUIT:
+                        self.flag_quit.set()
+                    elif cmd == KEY_START_STOP:
+                        if self.state == States.CAPTURING or self.state == States.PAUSED:
+                            self.end_capture_session()
+                        if self.state == States.STAND_BY:
+                            self.start_capture_session()
+                elif self.events.segment_ended.isSet():
+                    self.new_segment()
+                    self.events.segment_ended.clear()
+                elif self.events.vehicle_stopped.is_set():
+                    self.pause_capture_session()
+                    self.events.vehicle_stopped.clear()
+                elif self.events.vehicle_resumed.is_set():
+                    self.pause_capture_session()
+                    self.events.vehicle_resumed.clear()
+
+            except KeyboardInterrupt:
+                self.flag_quit.set()
