@@ -14,7 +14,8 @@ from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
 from messaging.agent_interface import AgentInterface
 from queue import SimpleQueue
-from utils import get_time_str, get_date_str
+from utils import get_time_str, get_date_str, Coords, get_new_folio
+from agents.agent_gps import DATA_DICT
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
@@ -57,6 +58,11 @@ class FRAICAPManager:
         self.agents = dict()
         self.dbi = None
         self.flag_agents_ready = Event()
+        self.coordinates = Coords()
+        self.segment_coords_ini = Coords()
+        self.segment_current_length = 0
+        self.segment_current_init_time = 0
+        self.segment_current_id = None
         self.set_up(manager_config_file, agents_config_file)
 
     def set_up(self, manager_config_file, agents_config_file):
@@ -134,7 +140,7 @@ class FRAICAPManager:
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
-        amt = Thread(target=self.monitor_agents, daemon=True)
+        amt = Thread(target=self.check_agents_ready, daemon=True)
         amt.start()
 
         self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
@@ -148,8 +154,44 @@ class FRAICAPManager:
             bt.start()
 
         self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
+        spacetime = Thread(target=self.check_spacetime, daemon=True)
+        spacetime.start()
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
+
+    def check_spacetime(self):
+        was_moving = False
+        while not self.flag_quit.is_set():
+            if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + self.mgr_cfg['capture']['splitting_time']:
+                self.logger.debug(f"Tiempo acumulado en útlimo tramo: {time.time()-self.segment_current_init_time:.1f} segundos. Seteando bandera para generar nuevo tramo")
+                self.events.segment_ended.set()
+                time.sleep(0.01)
+                continue
+
+            gps_datapoint = self.agents["gps"].get_data()
+            if gps_datapoint is not None:
+                self.coordinates.lat = gps_datapoint["latitude"]
+                self.coordinates.lon = gps_datapoint["longitude"]
+                dist = float(gps_datapoint['distance_delta'])
+                speed = float(gps_datapoint['spd_over_grnd'])
+                self.segment_current_length += dist
+                self.logger.debug(f"GPS: Dist: {dist}, Speed:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
+
+                # Pausa por detención
+                if speed < self.mgr_cfg['capture']['pause_speed'] and was_moving:
+                    was_moving = False
+                    self.events.vehicle_stopped.set()
+
+                # Reactivación post-detención
+                if speed > self.mgr_cfg['capture']['resume_speed'] and not was_moving:
+                    was_moving = True
+                    self.events.vehicle_resumed.set()
+
+                # División de captura en tramos, por distancia
+                if self.segment_current_length > self.mgr_cfg['capture']['splitting_distance']:
+                    self.events.segment_ended.set()
+
+                time.sleep(0.01)
 
     def get_buttons(self):
         while not self.flag_quit.is_set():
@@ -158,7 +200,7 @@ class FRAICAPManager:
                 self.q_user_commands.put(b)
             time.sleep(0.1)
 
-    def monitor_agents(self):
+    def check_agents_ready(self):
         while not self.flag_quit.is_set():
             all_ready = True
             for name, agt in self.agents.items():
@@ -180,10 +222,9 @@ class FRAICAPManager:
 
     def start_capture(self):
         self.logger.info("Iniciando captura")
-        self.capture_dir = self.get_new_capture_folder()
+        self.new_segment()
         for name, agent in self.agents.items():
             if agent.enabled:
-                agent.send_msg(Message.set_folder(self.capture_dir))
                 agent.send_msg(Message.cmd_start_capture())
 
     def end_capture(self):
@@ -193,10 +234,30 @@ class FRAICAPManager:
                 agent.send_msg(Message.cmd_end_capture())
 
     def new_segment(self):
+        self.segment_coords_ini = self.coordinates
+        self.segment_current_length = 0
+        self.segment_current_init_time = time.time()
+        self.segment_current_id = get_new_folio()
         self.capture_dir = self.get_new_capture_folder()
         for name, agent in self.agents.items():
             if agent.enabled:
                 agent.send_msg(Message.set_folder(self.capture_dir))
+
+    def update_segment_record(self):
+        """
+        Una vez finalizada la captura del tramo, actualiza el registro con la info de finalización"
+        Esto se debe ejecutar ANTES de iniciar el nuevo tramo, ya que ahí se resetean las variables
+        :return:
+        """
+        self.logger.debug("Actulizando registro de BDD con datos del último tramo")
+        duracion = int(time.time() - self.segment_current_init_time)
+        distancia = self.segment_current_length
+        lon_fin = self.coordinates.lon
+        lat_fin = self.coordinates.lat
+        lon_ini = self.segment_coords_ini.lon
+        lat_ini = self.segment_coords_ini.lat
+        self.logger.debug(f"Folio: {self.segment_current_id}, duración: {duracion}, distancia: {distancia}")
+        self.dbi.save_capture(self.segment_current_id, duracion, distancia, lon_ini, lat_ini, lon_fin, lat_fin)
 
     def get_new_capture_folder(self):
         folder = os.path.join(os.path.join(self.capture_dir_base, get_date_str()), get_time_str())
@@ -240,6 +301,7 @@ class FRAICAPManager:
                             self.state = States.CAPTURING
                 elif self.events.segment_ended.isSet():
                     if self.state == States.CAPTURING:
+                        self.update_segment_record()
                         self.new_segment()
                     self.events.segment_ended.clear()
                 elif self.events.vehicle_stopped.is_set():
