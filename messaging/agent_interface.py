@@ -4,7 +4,7 @@ from threading import Thread
 import logging
 from queue import SimpleQueue
 from messaging.messaging import Message, AgentStatus
-from constants import HWStates
+from hwagent.constants import HWStates
 
 class AgentInterface:
     def __init__(self, ip_addr, ip_port):
@@ -31,9 +31,9 @@ class AgentInterface:
     def __check_state(self):
         while True:
             if self.__connected:
-                self.send_msg(Message.cmd_query_agent_state().serialize())
+                self.send_msg(Message.cmd_query_agent_state())
                 time.sleep(1)
-                self.send_msg(Message.cmd_query_hw_state().serialize())
+                self.send_msg(Message.cmd_query_hw_state())
                 time.sleep(1)
 
     def __connect_insist(self):
@@ -94,7 +94,10 @@ class AgentInterface:
 
     def send_msg(self, msg: Message):
         if self.__connected:
-            self.__sock.sendall(msg.serialize())
-            return True
+            try:
+                self.__sock.sendall(msg.serialize())
+                return True
+            except BrokenPipeError:
+                self.logger.error(f"No se pudo enviar el mensaje al puerto {self.__ip_port}: BrokenPipe.")
         else:
             return False

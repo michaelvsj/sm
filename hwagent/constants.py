@@ -4,7 +4,7 @@ class Devices:
     OS1_IMU = "OS1_IMU"
     GPS = "GPS"
     IMU = "IMU"
-    CAMERA = "CAM"
+    CAMERA = "CAMERA"
     MODEM = "MODEM"
 
 

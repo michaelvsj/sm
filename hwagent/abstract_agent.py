@@ -9,7 +9,7 @@ from collections import deque
 import socket
 from threading import Thread, Event
 from messaging.messaging import Message
-from constants import HWStates, Devices, AgentStatus
+from hwagent.constants import HWStates, Devices, AgentStatus
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024

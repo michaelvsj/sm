@@ -12,8 +12,8 @@ import logging, logging.config
 import os
 from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
+from messaging.agent_interface import AgentInterface
 from queue import SimpleQueue
-from agent_interface import AgentInterface
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
@@ -137,6 +137,8 @@ class FRAICAPManager:
 
         self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
         self.logger.info("Iniciando thread de lectura de teclado")
+        kt = Thread(target=self.get_keyboard_input, daemon=True)
+        kt.start()
 
         self.logger.info("Iniciando thread de lectura de botones")
 
@@ -145,34 +147,54 @@ class FRAICAPManager:
         self.logger.info("Iniciando thread de reporte de estado de hardware")
 
     def monitor_agents(self):
-        while not self.flag_quit:
+        while not self.flag_quit.is_set():
             all_ready = True
             for name, agt in self.agents.items():
                 if agt.enabled:
-                    if agt.agent_status != AgentStatus.STAND_BY or agt.agent_status != AgentStatus.CAPTURING:
+                    if agt.agent_status != AgentStatus.STAND_BY and agt.agent_status != AgentStatus.CAPTURING:
                         all_ready = False
             if all_ready:
                 self.flag_agents_ready.set()
             else:
                 self.flag_agents_ready.clear()
-            time.sleep(0.1)
+            time.sleep(0.2)
 
+    def get_keyboard_input(self):
+        while not self.flag_quit.is_set():
+            k = input()[0]
+            self.q_user_commands.put(k)
+            self.events.new_command.set()
+
+    def start_capture_session(self):
+        pass
+
+    def end_capture_session(self):
+        pass
+
+    def new_segment(self):
+        pass
+
+    def pause_capture_session(self):
+        pass
 
     def run(self):
         self.initialize()
 
         self.logger.info("Esperando que agentes estén listos para capturar")
-        while not self.flag_agents_ready.is_set():
-            time.sleep(0.1)
-
-        self.logger.info("Esperando eventos")
+        try:
+            while not self.flag_agents_ready.is_set():
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            sys.exit(0)
 
         #  Aquí se implementa la lógica de alto nivel de la máquina de estados, basada en estados y eventos
+        self.logger.info("Esperando eventos")
         self.state = States.STAND_BY
         while not self.flag_quit.is_set():
             try:
                 if self.events.new_command.is_set():
                     cmd = self.q_user_commands.get()
+                    self.logger.info(f"Processing user input: {cmd}")
                     if self.q_user_commands.empty():
                         self.events.new_command.clear()
                     if cmd == KEY_QUIT:
@@ -194,3 +216,4 @@ class FRAICAPManager:
 
             except KeyboardInterrupt:
                 self.flag_quit.set()
+
