@@ -16,6 +16,7 @@ class Message:
     DATA = "DATA"
 
     # Commands
+    CMD_QUIT = "QUIT"
     CMD_START_CAPTURE = "START_CAPTURE"
     CMD_END_CAPTURE = "END_CAPTURE"
     CMD_QUERY_AGENT_STATE = "QUERY_AGENT_STATE"
@@ -60,6 +61,10 @@ class Message:
     def serialize(self):
         m = yaml.dump({'type': self.typ, 'arg': self.arg}).encode('ascii')
         return m + self.EOT
+
+    @classmethod
+    def cmd_quit(cls):
+        return cls(cls.COMMAND, cls.CMD_QUIT)
 
     @classmethod
     def cmd_start_capture(cls):

@@ -6,6 +6,7 @@ from queue import SimpleQueue
 from messaging.messaging import Message, AgentStatus
 from hwagent.constants import HWStates
 
+
 class AgentInterface:
     def __init__(self, ip_addr, ip_port):
         self.__ip_adress = ip_addr
@@ -14,7 +15,7 @@ class AgentInterface:
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__sock.setblocking(True)
         self.__connected = False
-        self.q_msg_in = SimpleQueue()
+        self.q_data_in = SimpleQueue()
         self.agent_status = AgentStatus.NOT_RESPONDING
         self.hw_status = HWStates.NOT_CONNECTED
         self.enabled = False
@@ -69,12 +70,14 @@ class AgentInterface:
                         elif msg.typ == Message.DEVICE_STATE:
                             self.hw_status = msg.arg
                         elif msg.typ == Message.DATA:
-                            self.q_msg_in.put(msg.arg)
+                            self.q_data_in.put(msg.arg)
                         cmd = b''
                     else:
                         cmd += bt
                 except TimeoutError:
                     pass
+                except ConnectionResetError:
+                    self.__connect_insist()
 
     def disconnect(self):
         self.__sock.close()
@@ -83,12 +86,12 @@ class AgentInterface:
     def is_connected(self):
         return self.__connected
 
-    def get_msg(self, block=False):
+    def get_data(self, block=False):
         if block:
-            return self.q_msg_in.get()
+            return self.q_data_in.get()
         else:
-            if not self.q_msg_in.empty():
-                return self.q_msg_in.get()
+            if not self.q_data_in.empty():
+                return self.q_data_in.get()
             else:
                 return None
 

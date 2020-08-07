@@ -156,6 +156,8 @@ class AbstractHWAgent(ABC):
                     cmd += bt
             except TimeoutError:
                 pass
+            except ConnectionResetError:
+                self.__manager_connect()
         self.connection.close()
 
     def __manager_send(self, msg):
@@ -182,7 +184,7 @@ class AbstractHWAgent(ABC):
         self._agent_run_data_threads()
         self.logger.info("Iniciando bucle principal")
         try:
-            while True:
+            while not self.flag_quit.is_set():
                 time.sleep(0.01)
                 if len(self.dq_from_mgr):
                     msg = self.dq_from_mgr.pop()
@@ -195,6 +197,9 @@ class AbstractHWAgent(ABC):
                         self.__manager_send(Message.agent_state(self.state).serialize())
                     elif msg.arg == Message.CMD_QUERY_HW_STATE:
                         self.__manager_send(Message.device_state(self._get_device_name(), self.hw_state).serialize())
+                    elif msg.arg == Message.CMD_QUIT:
+                        self.flag_quit.set()
+                        break
                     elif msg.typ == Message.SET_FOLDER:
                         self.__update_capture_file(msg.arg)
                     else:  # Todos los demás mensajes deben ser procesados por el agente particular

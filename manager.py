@@ -14,12 +14,13 @@ from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
 from messaging.agent_interface import AgentInterface
 from queue import SimpleQueue
+from utils import get_time_str, get_date_str
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
 AGENT_NAMES = ("os1_lidar", "os1_imu", "imu", "gps", "camera", "atmega", "inet")
 KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
-KEY_START_STOP = ' ' # espacio: para iniciar o detener una sesión de captura
+KEY_START_STOP = 's' # para iniciar o detener una sesión de captura
 
 class Events:
     """
@@ -51,6 +52,7 @@ class FRAICAPManager:
         self.state = States.STARTING
         self.logger = logging.getLogger("manager")
         self.capture_dir_base = ""
+        self.capture_dir = ""
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
         self.agents = dict()
         self.dbi = None
@@ -132,19 +134,29 @@ class FRAICAPManager:
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
-        self.thread_agents_monitor = Thread(target=self.monitor_agents, daemon=True)
-        self.thread_agents_monitor.start()
+        amt = Thread(target=self.monitor_agents, daemon=True)
+        amt.start()
 
         self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
         self.logger.info("Iniciando thread de lectura de teclado")
         kt = Thread(target=self.get_keyboard_input, daemon=True)
         kt.start()
 
-        self.logger.info("Iniciando thread de lectura de botones")
+        if self.agents["atmega"].enabled:
+            self.logger.info("Iniciando thread de lectura de botones")
+            bt = Thread(target=self.get_buttons, daemon=True)
+            bt.start()
 
         self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
+
+    def get_buttons(self):
+        while not self.flag_quit.is_set():
+            b = self.agents["atmega"].get_data()
+            if b is not None:
+                self.q_user_commands.put(b)
+            time.sleep(0.1)
 
     def monitor_agents(self):
         while not self.flag_quit.is_set():
@@ -161,21 +173,41 @@ class FRAICAPManager:
 
     def get_keyboard_input(self):
         while not self.flag_quit.is_set():
-            k = input()[0]
-            self.q_user_commands.put(k)
-            self.events.new_command.set()
+            k = input()
+            if k:
+                self.q_user_commands.put(k[0])
+                self.events.new_command.set()
 
-    def start_capture_session(self):
-        pass
+    def start_capture(self):
+        self.logger.info("Iniciando captura")
+        self.capture_dir = self.get_new_capture_folder()
+        for name, agent in self.agents.items():
+            if agent.enabled:
+                agent.send_msg(Message.set_folder(self.capture_dir))
+                agent.send_msg(Message.cmd_start_capture())
 
-    def end_capture_session(self):
-        pass
+    def end_capture(self):
+        self.logger.info("Terminando captura")
+        for name, agent in self.agents.items():
+            if agent.enabled:
+                agent.send_msg(Message.cmd_end_capture())
 
     def new_segment(self):
-        pass
+        self.capture_dir = self.get_new_capture_folder()
+        for name, agent in self.agents.items():
+            if agent.enabled:
+                agent.send_msg(Message.set_folder(self.capture_dir))
 
-    def pause_capture_session(self):
-        pass
+    def get_new_capture_folder(self):
+        folder = os.path.join(os.path.join(self.capture_dir_base, get_date_str()), get_time_str())
+        os.makedirs(folder, exist_ok=True)
+        self.logger.info("Nueva carpeta de destino: {folder}")
+        return folder
+
+    def end_agents(self):
+        for name, agent in self.agents.items():
+            if agent.enabled:
+                agent.send_msg(Message.cmd_quit())
 
     def run(self):
         self.initialize()
@@ -201,19 +233,27 @@ class FRAICAPManager:
                         self.flag_quit.set()
                     elif cmd == KEY_START_STOP:
                         if self.state == States.CAPTURING or self.state == States.PAUSED:
-                            self.end_capture_session()
-                        if self.state == States.STAND_BY:
-                            self.start_capture_session()
+                            self.end_capture()
+                            self.state = States.STAND_BY
+                        elif self.state == States.STAND_BY:
+                            self.start_capture()
+                            self.state = States.CAPTURING
                 elif self.events.segment_ended.isSet():
-                    self.new_segment()
+                    if self.state == States.CAPTURING:
+                        self.new_segment()
                     self.events.segment_ended.clear()
                 elif self.events.vehicle_stopped.is_set():
-                    self.pause_capture_session()
+                    if self.state == States.CAPTURING:
+                        self.end_capture()
+                        self.state = States.PAUSED
                     self.events.vehicle_stopped.clear()
                 elif self.events.vehicle_resumed.is_set():
-                    self.pause_capture_session()
+                    if self.state == States.PAUSED:
+                        self.start_capture()
+                        self.state = States.CAPTURING
                     self.events.vehicle_resumed.clear()
-
+                time.sleep(0.001)
             except KeyboardInterrupt:
                 self.flag_quit.set()
 
+            self.end_agents()
