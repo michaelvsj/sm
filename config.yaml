@@ -1,9 +1,11 @@
 use_agents:
-  agent_imu: True
-  agent_gps: True
-  agent_camera: True
-  agent_os1_lidar: True
-  agent_os1_imu: True
+  imu: True   # Acelerómetro + giróscopo + magnetómetro
+  gps: True   # receptor GNSS
+  camera: True  # Cámara trasera
+  os1_lidar: True   # LiDAR
+  os1_imu: True   # IMU interna del LiDAR
+  inet: True  # Agente que chequea la conexión a internet
+  atmega: True  # I/O de usuario via leds y botones
 capture:
   output_path: /mnt/data/capture
   splitting_distance: 50 #metros
@@ -12,7 +14,6 @@ capture:
   resume_speed: 3 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
 sqlite:
   db_file: /home/frai/sw/fraicap.sqlite
-  db_table: tramos
 
 logging:
   version: 1

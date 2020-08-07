@@ -16,5 +16,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         agents_config_file = sys.argv[2]
     manager = FRAICAPManager()
-    manager.read_config(manager_config_file, agents_config_file)
+    manager.set_up(manager_config_file, agents_config_file)
     manager.run()
