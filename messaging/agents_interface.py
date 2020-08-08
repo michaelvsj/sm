@@ -8,7 +8,8 @@ from hwagent.constants import HWStates
 
 
 class AgentInterface:
-    def __init__(self, ip_addr, ip_port):
+    def __init__(self, name, ip_addr, ip_port):
+        self.name = name
         self.__ip_adress = ip_addr
         self.__ip_port = ip_port
         self.__connection = None
@@ -22,11 +23,11 @@ class AgentInterface:
         self.logger = logging.getLogger("AgentInterface")
 
     def connect(self):
-        ct = Thread(target=self.__connect_insist)
+        ct = Thread(target=self.__connect_insist, name=f"AgentInterface({self.name}).__connect_insist")
         ct.start()
-        rt = Thread(target=self.__receive, daemon=True)
+        rt = Thread(target=self.__receive, name=f"AgentInterface({self.name}).__receive", daemon=True)
         rt.start()
-        st = Thread(target=self.__check_state, daemon=True)
+        st = Thread(target=self.__check_state, name=f"AgentInterface({self.name}).__check_state", daemon=True)
         st.start()
 
     def __check_state(self):

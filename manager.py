@@ -12,16 +12,16 @@ import logging, logging.config
 import os
 from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
-from messaging.agent_interface import AgentInterface
+from messaging.agents_interface import AgentInterface
 from queue import SimpleQueue
 from utils import get_time_str, get_date_str, Coords, get_new_folio
-from agents.agent_gps import DATA_DICT
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
 AGENT_NAMES = ("os1_lidar", "os1_imu", "imu", "gps", "camera", "atmega", "inet")
 KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
-KEY_START_STOP = 's' # para iniciar o detener una sesión de captura
+KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
+
 
 class Events:
     """
@@ -34,6 +34,7 @@ class Events:
         self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
         self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
         self.new_command = Event()  # El usuario presionó el boton de inicio/fin de captura o una tecla en consola. Como sea, hay un nuevo comando en la cola de comandos
+
 
 class States(Enum):
     """
@@ -83,14 +84,14 @@ class FRAICAPManager:
             try:
                 assert isinstance(self.mgr_cfg['use_agents'][agt], bool)
                 try:
-                    self.agents[agt] = AgentInterface(LOCALHOST, agents_cfg[f"agent_{agt}"]["local_port"])
+                    self.agents[agt] = AgentInterface(agt, LOCALHOST, agents_cfg[f"agent_{agt}"]["local_port"])
                     if self.mgr_cfg["use_agents"][agt]:
                         self.agents[agt].enabled = True
                     else:
                         self.agents[agt].enabled = False
                 except KeyError:
                     self.logger.warning(f"No hay configuración para el agente agent_{agt} en {agents_config_file}")
-                    self.agents[agt] = AgentInterface('', '')
+                    self.agents[agt] = AgentInterface(agt, '', '')
                     self.agents[agt].enabled = False
             except AssertionError as e:
                 self.logger.error("Error en configuracion. Parámetro 'use_agents' debe ser True o False")
@@ -140,21 +141,21 @@ class FRAICAPManager:
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
-        amt = Thread(target=self.check_agents_ready, daemon=True)
+        amt = Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True)
         amt.start()
 
         self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
         self.logger.info("Iniciando thread de lectura de teclado")
-        kt = Thread(target=self.get_keyboard_input, daemon=True)
+        kt = Thread(target=self.get_keyboard_input, name="get_keyboard_input", daemon=True)
         kt.start()
 
         if self.agents["atmega"].enabled:
             self.logger.info("Iniciando thread de lectura de botones")
-            bt = Thread(target=self.get_buttons, daemon=True)
+            bt = Thread(target=self.get_buttons, name="get_buttons", daemon=True)
             bt.start()
 
         self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
-        spacetime = Thread(target=self.check_spacetime, daemon=True)
+        spacetime = Thread(target=self.check_spacetime, name="check_spacetime", daemon=True)
         spacetime.start()
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
@@ -162,8 +163,10 @@ class FRAICAPManager:
     def check_spacetime(self):
         was_moving = False
         while not self.flag_quit.is_set():
-            if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + self.mgr_cfg['capture']['splitting_time']:
-                self.logger.debug(f"Tiempo acumulado en útlimo tramo: {time.time()-self.segment_current_init_time:.1f} segundos. Seteando bandera para generar nuevo tramo")
+            if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + \
+                    self.mgr_cfg['capture']['splitting_time']:
+                self.logger.debug(
+                    f"Tiempo acumulado en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} segundos. Seteando bandera para generar nuevo tramo")
                 self.events.segment_ended.set()
                 time.sleep(0.01)
                 continue
@@ -175,7 +178,8 @@ class FRAICAPManager:
                 dist = float(gps_datapoint['distance_delta'])
                 speed = float(gps_datapoint['spd_over_grnd'])
                 self.segment_current_length += dist
-                self.logger.debug(f"GPS: Dist: {dist}, Speed:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
+                self.logger.debug(
+                    f"GPS: Dist: {dist}, Speed:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
 
                 # Pausa por detención
                 if speed < self.mgr_cfg['capture']['pause_speed'] and was_moving:
@@ -257,7 +261,13 @@ class FRAICAPManager:
         lon_ini = self.segment_coords_ini.lon
         lat_ini = self.segment_coords_ini.lat
         self.logger.debug(f"Folio: {self.segment_current_id}, duración: {duracion}, distancia: {distancia}")
-        self.dbi.save_capture(self.segment_current_id, duracion, distancia, lon_ini, lat_ini, lon_fin, lat_fin)
+        self.dbi.save_capture(folio=self.segment_current_id,
+                              carpeta=duracion,
+                              distancia=distancia,
+                              lon_ini=lon_ini,
+                              lat_ini=lat_ini,
+                              lon_fin=lon_fin,
+                              lat_fin=lat_fin)
 
     def get_new_capture_folder(self):
         folder = os.path.join(os.path.join(self.capture_dir_base, get_date_str()), get_time_str())
@@ -287,7 +297,7 @@ class FRAICAPManager:
             try:
                 if self.events.new_command.is_set():
                     cmd = self.q_user_commands.get()
-                    self.logger.info(f"Processing user input: {cmd}")
+                    self.logger.info(f"Procesando comando de usuario: '{cmd}'")
                     if self.q_user_commands.empty():
                         self.events.new_command.clear()
                     if cmd == KEY_QUIT:

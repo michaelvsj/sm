@@ -20,8 +20,6 @@ class CameraAgent(AbstractHWAgent):
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
-        self.write_data = Event()
-        self.write_data.clear()
 
     def _get_device_name(self):
         return Devices.CAMERA

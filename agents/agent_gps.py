@@ -17,7 +17,6 @@ from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
 RMC_FIELDS = ["latitude", "longitude", "timestamp", "spd_over_grnd", "true_course"]
 GGA_FIELDS = ["gps_qual", "num_sats"]
-DATA_DICT = dict.fromkeys(APP_FIELDS + RMC_FIELDS + GGA_FIELDS)
 READ_TIMEOUT = 1.5
 
 
@@ -31,7 +30,7 @@ class GPSAgent(AbstractHWAgent):
         self.baudrate = ""
         self.ser = serial.Serial()
         self.last_coords = None
-        self.datapoint = DATA_DICT
+        self.datapoint = dict.fromkeys(APP_FIELDS + RMC_FIELDS + GGA_FIELDS)
         self.output_file_header = ";".join([k for k in self.datapoint.keys()])
         self.sim_acceleration_sign = 1  # Usado para simular aceleración y frenado
         self.geod = Geod(ellps='WGS84')

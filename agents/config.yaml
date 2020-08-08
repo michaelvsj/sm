@@ -65,7 +65,13 @@ agent_atmega:
 #  local_port: 30007
 #  output_file_name:
 #  hw_connection_retries: 1000
-
+agent_data_copy:
+  manager_port: 0
+  local_port: 30008
+  output_file_name:
+  hw_connection_retries: 1000
+  usb_mount_path: '/var/run/usbmount'
+  sync_every: 20
 
 logging:
   version: 1
@@ -128,6 +134,15 @@ logging:
         interval: 1
         backupCount: 7
         encoding: utf-8
+      data_copy_handler:
+        class: logging.handlers.TimedRotatingFileHandler
+        level: DEBUG
+        formatter: simple
+        filename: logs/data_copy.log
+        when: midnight
+        interval: 1
+        backupCount: 7
+        encoding: utf-8
       root_handler:
         class : logging.NullHandler
   loggers:
@@ -143,6 +158,8 @@ logging:
         handlers: [imu_handler]
       agent_atmega:
         handlers: [atmega_handler]
+      agent_data_copy:
+        handlers: [data_copy_handler]
   root:
       level: DEBUG
       handlers: [root_handler]

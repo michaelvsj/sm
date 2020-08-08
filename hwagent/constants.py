@@ -6,6 +6,7 @@ class Devices:
     IMU = "IMU"
     CAMERA = "CAMERA"
     MODEM = "MODEM"
+    PENDRIVE = "PENDRIVE"
 
 
 class HWStates:
