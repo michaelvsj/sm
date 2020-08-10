@@ -46,25 +46,25 @@ class States(Enum):
     PAUSED = auto()
 
 
+class AgentProxies:
+    """
+    ES IMPERATIVO QUE LOS NOMBRES DE LOS AGENTES COINCIDAN CON LOS DE LA CONFIGURACIÓN
+    """
+    def __init__(self):
+        self.OS1_LIDAR = AgentInterface("os1_lidar")
+        self.OS1_IMU = AgentInterface("os1_imu")
+        self.IMU = AgentInterface("imu")
+        self.GPS = AgentInterface("gps")
+        self.CAMERA = AgentInterface("camera")
+        self.ATMEGA = AgentInterface("atmega")
+        self.INET = AgentInterface("inet")
+        self.DATA_COPY = AgentInterface("data_copy")
+
+    def items(self):
+        return self.__dict__.values()
+
+
 class FRAICAPManager:
-
-    class AgentProxies:
-        """
-        ES IMPERATIVO QUE LOS NOMBRES DE LOS AGENTES COINCIDAN CON LOS DE LA CONFIGURACIÓN
-        """
-        def __init__(self):
-            self.OS1_LIDAR = AgentInterface("os1_lidar")
-            self.OS1_IMU = AgentInterface("os1_imu")
-            self.IMU = AgentInterface("imu")
-            self.GPS = AgentInterface("gps")
-            self.CAMERA = AgentInterface("camera")
-            self.ATMEGA = AgentInterface("atmega")
-            self.INET = AgentInterface("inet")
-            self.DATA_COPY = AgentInterface("data_copy")
-
-        def items(self):
-            return self.__dict__.values()
-
     def __init__(self, manager_config_file, agents_config_file):
         self.flag_quit = Event()
         self.events = Events()
@@ -73,7 +73,7 @@ class FRAICAPManager:
         self.capture_dir_base = ""
         self.capture_dir = ""
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
-        self.agents = self.AgentProxies()
+        self.agents = AgentProxies()
         self.dbi = None
         self.flag_agents_ready = Event()
         self.coordinates = Coords()
@@ -81,6 +81,7 @@ class FRAICAPManager:
         self.segment_current_length = 0
         self.segment_current_init_time = 0
         self.segment_current_id = None
+        self.mgr_cfg = dict()
         self.set_up(manager_config_file, agents_config_file)
 
     def set_up(self, manager_config_file, agents_config_file):
