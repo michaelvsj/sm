@@ -8,7 +8,7 @@ from hwagent.constants import HWStates
 
 
 class AgentInterface:
-    def __init__(self, name, ip_addr, ip_port):
+    def __init__(self, name, ip_addr='', ip_port=0):
         self.name = name
         self.__ip_adress = ip_addr
         self.__ip_port = ip_port
@@ -22,13 +22,17 @@ class AgentInterface:
         self.enabled = False
         self.logger = logging.getLogger("AgentInterface")
 
+    def set_ip_address(self, addr, port):
+        self.__ip_adress = addr
+        self.__ip_port = port
+
     def connect(self):
-        ct = Thread(target=self.__connect_insist, name=f"AgentInterface({self.name}).__connect_insist")
-        ct.start()
-        rt = Thread(target=self.__receive, name=f"AgentInterface({self.name}).__receive", daemon=True)
-        rt.start()
-        st = Thread(target=self.__check_state, name=f"AgentInterface({self.name}).__check_state", daemon=True)
-        st.start()
+        if not self.__ip_port or not self.__ip_adress:
+            self.logger.error(f"Primero se debe setear la direccion y puerto IP del agente {self.name}")
+            return
+        Thread(target=self.__connect_insist, name=f"AgentInterface({self.name}).__connect_insist").start()
+        Thread(target=self.__receive, name=f"AgentInterface({self.name}).__receive", daemon=True).start()
+        Thread(target=self.__check_state, name=f"AgentInterface({self.name}).__check_state", daemon=True).start()
 
     def __check_state(self):
         while True:

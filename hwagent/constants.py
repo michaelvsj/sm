@@ -5,7 +5,7 @@ class Devices:
     GPS = "GPS"
     IMU = "IMU"
     CAMERA = "CAMERA"
-    MODEM = "MODEM"
+    ROUTER = "ROUTER"
     PENDRIVE = "PENDRIVE"
 
 

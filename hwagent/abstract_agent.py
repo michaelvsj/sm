@@ -170,6 +170,9 @@ class AbstractHWAgent(ABC):
         msg = Message(_type=Message.DATA, arg=data).serialize()
         self.__manager_send(msg)
 
+    def _send_msg_to_mgr(self, msg: Message):
+        self.__manager_send(msg.serialize())
+
     def run(self):
         self.logger.info("Iniciando thread de comunicación con manager")
         mgr_comm = Thread(target=self.__manager_recv, daemon=True)

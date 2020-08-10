@@ -30,8 +30,8 @@ class DBInterface:
                 f"Error al crear nuevo registro de tramo en base de datos. Query: {sql}")
             return False
 
-    def get_processed_regs(self):
-        sql = f"SELECT dir, timestamp FROM {DB_TABLE} WHERE estado != {EstatusDelTramo.CAPTURING.value}" \
+    def get_copy_pending(self):
+        sql = f"SELECT dir, num_folio FROM {DB_TABLE} WHERE estado != {EstatusDelTramo.CAPTURING.value}" \
               f" AND (copiado != {EstatusDeCopia.COPIED_OK.value} OR copiado ISNULL)"
         try:
             with sqlite3.connect(self.db) as conn:
@@ -43,9 +43,8 @@ class DBInterface:
                 f"Error al obtener registros desde base de datos. Query: {sql}. Error: {str(e)}")
             return False
 
-    def copy_done(self, timestamp):
-        timestamp = int(timestamp)
-        sql = f"UPDATE {DB_TABLE} set copiado = {EstatusDeCopia.COPIED_OK.value} WHERE timestamp = {timestamp}"
+    def copy_done(self, num_folio):
+        sql = f"UPDATE {DB_TABLE} set copiado = {EstatusDeCopia.COPIED_OK.value} WHERE num_folio = {num_folio}"
         try:
             with sqlite3.connect(self.db) as conn:
                 conn.execute(sql)

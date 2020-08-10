@@ -54,7 +54,7 @@ class AtmegaAgent(AbstractHWAgent):
         self.devices_leds[Devices.GPS] = LED_DEV_GPS
         self.devices_leds[Devices.IMU] = LED_DEV_IMU
         self.devices_leds[Devices.CAMERA] = LED_DEV_CAM
-        self.devices_leds[Devices.MODEM] = LED_DEV_MODEM
+        self.devices_leds[Devices.ROUTER] = LED_DEV_MODEM
 
     def _agent_config(self):
         """
@@ -200,10 +200,13 @@ class AtmegaAgent(AbstractHWAgent):
                 self.ser.write(START_OF_TEXT + LED_CAPTURING + ON)
             elif msg.arg == Message.SYS_CAPTURE_PAUSED:
                 self.ser.write(START_OF_TEXT + LED_CAPTURING + BLINK)
-            elif msg.arg == Message.EXT_DRIVE_IN_USE:
+            elif msg.arg == Message.SYS_EXT_DRIVE_IN_USE:
                 self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + ON)
-            elif msg.arg == Message.EXT_DRIVE_NOT_IN_USE:
+            elif msg.arg == Message.SYS_EXT_DRIVE_NOT_IN_USE:
                 self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + OFF)
+            elif msg.arg == Message.SYS_EXT_DRIVE_FULL:
+                self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + BLINK)
+
         # LEDs de status de equipos
         elif msg.typ == Message.DEVICE_STATE:
             device = msg.arg["device"]

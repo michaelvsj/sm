@@ -4,7 +4,7 @@ from hwagent.constants import AgentStatus, Devices, HWStates
 
 class Message:
     """
-    typ: Tipo de mensaje. Debe ser un elento de la clase MsgType
+    typ: Tipo de mensaje. Debe ser un elemento de la clase MsgType
     arg: Cualquier string
     """
     # Types
@@ -29,8 +29,9 @@ class Message:
     SYS_CAPTURE_ON = "CAP_ON"
     SYS_CAPTURE_OFF = "CAP_OFF"
     SYS_CAPTURE_PAUSED = "CAP_PAUSED"
-    EXT_DRIVE_IN_USE = "EXT_DRV_IN_USE"
-    EXT_DRIVE_NOT_IN_USE = "EXT_DRV_NOT_IN_USE"
+    SYS_EXT_DRIVE_IN_USE = "EXT_DRV_IN_USE"
+    SYS_EXT_DRIVE_NOT_IN_USE = "EXT_DRV_NOT_IN_USE"
+    SYS_EXT_DRIVE_FULL = "SYS_EXT_DRIVE_FULL"
 
     EOT = b'\x1E'     # Separador de mensajes
 
@@ -97,6 +98,18 @@ class Message:
     @classmethod
     def system_error(cls):
         return cls(cls.SYS_STATE, cls.SYS_ERROR)
+
+    @classmethod
+    def system_ext_drive_in_use(cls):
+        return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_IN_USE)
+
+    @classmethod
+    def system_ext_drive_not_in_use(cls):
+        return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_NOT_IN_USE)
+
+    @classmethod
+    def system_ext_drive_full(cls):
+        return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_FULL)
 
     @classmethod
     def capture_on(cls):

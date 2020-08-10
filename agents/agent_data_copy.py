@@ -3,14 +3,15 @@ import os
 import shutil
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
-from threading import Thread, Event
+from threading import Thread
 from os import walk, path, sync
 
 import init_agent
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from hwagent.constants import Devices, HWStates, AgentStatus
+from messaging.messaging import Message
+from bdd import DBInterface
 
 
 class DataCopy(AbstractHWAgent):
@@ -19,12 +20,15 @@ class DataCopy(AbstractHWAgent):
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
+        self.database = ''
+        self.dbi = None
 
     def _get_device_name(self):
         return Devices.PENDRIVE
 
     def _agent_process_manager_message(self, msg):
-        pass
+        if msg.typ == Message.DATA:
+            self.database = msg.arg
 
     def _agent_config(self):
         """
@@ -99,47 +103,48 @@ class DataCopy(AbstractHWAgent):
         pass
 
     def __copy_data(self):
+        while not self.database and not self.flag_quit.is_set():
+            time.sleep(0.1)
+        self.dbi = DBInterface(self.database)
         while not self.flag_quit.is_set():
-            records = self.dbi.get_processed_regs()  # Lee los registros pendientes de copiar
+            records = self.dbi.get_copy_pending()  # Lee los registros pendientes de copiar
             if self.drive_connected and self.space_available and records:  # Si están dadas las condiciones...
                 self.logger.info("Condiciones de copia reunidas. Iniciando respaldo de archivos")
                 self.logger.info(f"Tramos pendientes por copiar: {len(records)}")
-                self.pipe_conn.send(Pcom(Pcom.Mensaje.COPY_STARTED))  # Inicia copiado
+                self._send_msg_to_mgr(Message.system_ext_drive_in_use())
                 aux_conunter = 0
                 for row in records:
                     # Verifica que no se haya levantado el flag de fin
                     if self.flag_quit.is_set():
                         break
-                    timestamp = row[1]
+                    folio = row[1]
                     dest = path.join(self.destination, row[0].split(path.sep)[-2], row[0].split(path.sep)[-1])
                     self.logger.debug(f"Copiando data a {dest}")
-                    # Si directorio de destino ya existe (e.g. si un tramo quedó a medio copiar), lo borra antes de terminar la copia
-                    if path.exists(dest):
-                        if path.isdir(dest):
-                            shutil.rmtree(dest)
+                    # Si directorio de destino ya existe (e.g. si un tramo quedó a medio copiar), lo borra antes de
+                    # terminar la copia
+                    if path.exists(dest) and path.isdir(dest):
+                        shutil.rmtree(dest)
                     try:
                         shutil.copytree(row[0], dest)
                     except OSError as e:
                         if e.errno == 28:  # No queda espacio en el dispositivo
                             self.logger.error("No hay espacio suficiente en el pendrive")
                             self.space_available = False
+                            self._send_msg_to_mgr(Message.system_ext_drive_full())
                             break
                     except:
                         self.logger.exception("")
-                        pass
                     aux_conunter += 1
                     if aux_conunter >= self.sync_every:
                         sync()
                         aux_conunter = 0
-                    self.dbi.copy_done(timestamp)
+                    self.dbi.copy_done(folio)
                     # Vuelve a verificar estado luego de copiar los datos de cada registro
-                    if not (self.copy_allowed and self.drive_connected):  # Si ya no están dadas las condiciones
-                        self.logger.info(
-                            "Ya no están las condiciones para copiar. Termino bucle hasta que se pueda copiar nuevamente")
+                    if not self.drive_connected:  # Si ya no están dadas las condiciones
                         break  # Sale de bucle que recorre registros
                 sync()
-                self.pipe_conn.send(Pcom(Pcom.Mensaje.COPY_ENDED))  # Avisa que terminó de copiar
-            while not (self.copy_allowed and self.drive_connected and self.space_available) and not self.quitting:
+                self._send_msg_to_mgr(Message.system_ext_drive_not_in_use())  # Avisa que terminó de copiar
+            while not (self.drive_connected and self.space_available) and not self.flag_quit.is_set():
                 time.sleep(0.1)  # Si no están las condiciones, reintenta en 0.1 segundo
 
 

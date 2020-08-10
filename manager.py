@@ -11,6 +11,7 @@ from enum import Enum, auto
 import logging, logging.config
 import os
 from bdd import DBInterface, EstatusDelTramo
+from constants import Devices
 from messaging.messaging import Message, AgentStatus
 from messaging.agents_interface import AgentInterface
 from queue import SimpleQueue
@@ -18,7 +19,6 @@ from utils import get_time_str, get_date_str, Coords, get_new_folio
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
-AGENT_NAMES = ("os1_lidar", "os1_imu", "imu", "gps", "camera", "atmega", "inet")
 KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
 KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
 
@@ -48,6 +48,23 @@ class States(Enum):
 
 class FRAICAPManager:
 
+    class AgentProxies:
+        """
+        ES IMPERATIVO QUE LOS NOMBRES DE LOS AGENTES COINCIDAN CON LOS DE LA CONFIGURACIÓN
+        """
+        def __init__(self):
+            self.OS1_LIDAR = AgentInterface("os1_lidar")
+            self.OS1_IMU = AgentInterface("os1_imu")
+            self.IMU = AgentInterface("imu")
+            self.GPS = AgentInterface("gps")
+            self.CAMERA = AgentInterface("camera")
+            self.ATMEGA = AgentInterface("atmega")
+            self.INET = AgentInterface("inet")
+            self.DATA_COPY = AgentInterface("data_copy")
+
+        def items(self):
+            return self.__dict__.values()
+
     def __init__(self, manager_config_file, agents_config_file):
         self.flag_quit = Event()
         self.events = Events()
@@ -56,7 +73,7 @@ class FRAICAPManager:
         self.capture_dir_base = ""
         self.capture_dir = ""
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
-        self.agents = dict()
+        self.agents = self.AgentProxies()
         self.dbi = None
         self.flag_agents_ready = Event()
         self.coordinates = Coords()
@@ -80,19 +97,18 @@ class FRAICAPManager:
         except FileNotFoundError:
             self.logger.error(f"Archivo de configuración {agents_config_file} no encontrado. Terminando.")
             sys.exit(1)
-        for agt in AGENT_NAMES:
+        for agt in self.agents.items():
             try:
-                assert isinstance(self.mgr_cfg['use_agents'][agt], bool)
+                assert isinstance(self.mgr_cfg['use_agents'][agt.name], bool)
                 try:
-                    self.agents[agt] = AgentInterface(agt, LOCALHOST, agents_cfg[f"agent_{agt}"]["local_port"])
-                    if self.mgr_cfg["use_agents"][agt]:
-                        self.agents[agt].enabled = True
+                    agt.set_ip_address(LOCALHOST, agents_cfg[f"agent_{agt.name}"]["local_port"])
+                    if self.mgr_cfg["use_agents"][agt.name]:
+                        agt.enabled = True
                     else:
-                        self.agents[agt].enabled = False
+                        agt.enabled = False
                 except KeyError:
-                    self.logger.warning(f"No hay configuración para el agente agent_{agt} en {agents_config_file}")
-                    self.agents[agt] = AgentInterface(agt, '', '')
-                    self.agents[agt].enabled = False
+                    self.logger.warning(f"No hay configuración para el agente agent_{agt.name} en {agents_config_file}")
+                    agt.enabled = False
             except AssertionError as e:
                 self.logger.error("Error en configuracion. Parámetro 'use_agents' debe ser True o False")
                 continue
@@ -124,11 +140,11 @@ class FRAICAPManager:
             self.logger.error("No se pudo determinar sistema operativo")
             sys.exit(1)
         agents_working_dir = os.path.dirname(os.path.abspath(__file__)) + os.sep + "agents"
-        for agt in AGENT_NAMES:
-            if self.agents[agt].enabled:
-                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt}.py"]).pid
-                self.logger.info(f"Agente {agt} ejecutandose con PID {pid}")
-                self.agents[agt].connect()
+        for agt in self.agents.items():
+            if agt.enabled:
+                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"]).pid
+                self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
+                agt.connect()
 
         # Espera a que agentes se conecten
         self.logger.info("Esperando conexión a agentes")
@@ -141,24 +157,35 @@ class FRAICAPManager:
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
-        amt = Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True)
-        amt.start()
+        Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True).start()
 
         self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
         self.logger.info("Iniciando thread de lectura de teclado")
-        kt = Thread(target=self.get_keyboard_input, name="get_keyboard_input", daemon=True)
-        kt.start()
+        Thread(target=self.get_keyboard_input, name="get_keyboard_input", daemon=True).start()
 
-        if self.agents["atmega"].enabled:
+        if self.agents.ATMEGA.enabled:
             self.logger.info("Iniciando thread de lectura de botones")
-            bt = Thread(target=self.get_buttons, name="get_buttons", daemon=True)
-            bt.start()
+            Thread(target=self.get_buttons, name="get_buttons", daemon=True).start()
 
         self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
-        spacetime = Thread(target=self.check_spacetime, name="check_spacetime", daemon=True)
-        spacetime.start()
+        Thread(target=self.check_spacetime, name="check_spacetime", daemon=True).start()
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
+        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
+
+    def check_hw(self):
+        while not self.flag_quit.is_set():
+            if self.agents.OS1_LIDAR.enabled:
+                self.agents.ATMEGA.send_msg(Message.device_state(Devices.OS1_LIDAR, self.agents.OS1_LIDAR.hw_status))
+            if self.agents.IMU.enabled:
+                self.agents.ATMEGA.send_msg(Message.device_state(Devices.IMU, self.agents.IMU.hw_status))
+            if self.agents.CAMERA.enabled:
+                self.agents.ATMEGA.send_msg(Message.device_state(Devices.CAMERA, self.agents.CAMERA.hw_status))
+            if self.agents.GPS.enabled:
+                self.agents.ATMEGA.send_msg(Message.device_state(Devices.GPS, self.agents.GPS.hw_status))
+            if self.agents.INET.enabled:
+                self.agents.ATMEGA.send_msg(Message.device_state(Devices.ROUTER, self.agents.INET.hw_status))
+            time.sleep(1)
 
     def check_spacetime(self):
         was_moving = False
@@ -166,12 +193,13 @@ class FRAICAPManager:
             if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + \
                     self.mgr_cfg['capture']['splitting_time']:
                 self.logger.debug(
-                    f"Tiempo acumulado en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} segundos. Seteando bandera para generar nuevo tramo")
+                    f"Tiempo acumulado en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} segundos. "
+                    f"Seteando bandera para generar nuevo tramo")
                 self.events.segment_ended.set()
                 time.sleep(0.01)
                 continue
 
-            gps_datapoint = self.agents["gps"].get_data()
+            gps_datapoint = self.agents.GPS.get_data()
             if gps_datapoint is not None:
                 self.coordinates.lat = gps_datapoint["latitude"]
                 self.coordinates.lon = gps_datapoint["longitude"]
@@ -179,7 +207,8 @@ class FRAICAPManager:
                 speed = float(gps_datapoint['spd_over_grnd'])
                 self.segment_current_length += dist
                 self.logger.debug(
-                    f"GPS: Dist: {dist}, Speed:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
+                    f"GPS: Dist: {dist}, Speed:{speed}, "
+                    f"Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
 
                 # Pausa por detención
                 if speed < self.mgr_cfg['capture']['pause_speed'] and was_moving:
@@ -199,7 +228,7 @@ class FRAICAPManager:
 
     def get_buttons(self):
         while not self.flag_quit.is_set():
-            b = self.agents["atmega"].get_data()
+            b = self.agents.ATMEGA.get_data()
             if b is not None:
                 self.q_user_commands.put(b)
             time.sleep(0.1)
@@ -289,6 +318,9 @@ class FRAICAPManager:
                 time.sleep(0.1)
         except KeyboardInterrupt:
             sys.exit(0)
+
+        # Informa al agent_data_copy la ubicación de la base de datos
+        self.agents.DATA_COPY.send_msg(Message(Message.DATA, self.mgr_cfg['sqlite']['db_file']))
 
         #  Aquí se implementa la lógica de alto nivel de la máquina de estados, basada en estados y eventos
         self.logger.info("Esperando eventos")
