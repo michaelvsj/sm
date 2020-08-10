@@ -72,7 +72,7 @@ class AgentInterface:
                         msg = Message.deserialize(cmd)
                         if msg.typ == Message.AGENT_STATE:
                             self.agent_status = msg.arg
-                        elif msg.typ == Message.DEVICE_STATE:
+                        elif msg.typ == Message.HW_STATE:
                             self.hw_status = msg.arg
                         elif msg.typ == Message.DATA:
                             self.q_data_in.put(msg.arg)
@@ -99,6 +99,9 @@ class AgentInterface:
                 return self.q_data_in.get()
             else:
                 return None
+
+    def send_data(self, data):
+        self.send_msg(Message.data_msg(data))
 
     def send_msg(self, msg: Message):
         if self.__connected:

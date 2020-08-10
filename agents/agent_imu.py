@@ -10,7 +10,7 @@ from threading import Thread, Event
 import serial
 
 import init_agent
-from hwagent.constants import Devices, AgentStatus, HWStates
+from hwagent.constants import AgentStatus, HWStates
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from yost3space.api import Yost3SpaceAPI, READ_TIMEOUT, BAUD_RATE, unpack
 

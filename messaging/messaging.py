@@ -10,10 +10,10 @@ class Message:
     # Types
     COMMAND = "COMMAND"
     SYS_STATE = "SYS_STATE"
-    DEVICE_STATE = "DEV_STATE"
+    HW_STATE = "HW_STATE"
     AGENT_STATE = "AGENT_STATE"
     SET_FOLDER = "SET_FOLDER"
-    DATA = "DATA"
+    DATA = "DATA"   # tipo más bien genérico, donde la estructura del argumento debe ser conocida por el manager y por el agente
 
     # Commands
     CMD_QUIT = "QUIT"
@@ -124,12 +124,15 @@ class Message:
         return cls(cls.SYS_STATE, cls.SYS_CAPTURE_PAUSED)
 
     @classmethod
-    def device_state(cls, device, state):
-        assert device in Devices.__dict__.keys(), "device debe estar definido en clase devices.Devices"
-        assert state in HWStates.__dict__.keys(), "state debe estar definido en devices.HWStates"
-        return cls(cls.DEVICE_STATE, {"device": device, "state": state})
+    def agent_hw_state(cls, hwstate):
+        assert hwstate in HWStates.__dict__.keys(), "state debe estar definido en devices.HWStates"
+        return cls(cls.HW_STATE, hwstate)
 
     @classmethod
     def agent_state(cls, agentstate):
         assert agentstate in AgentStatus.__dict__.keys(), "argumento 'agentstate' debe estar defnido en clase AgentStatus"
         return cls(cls.AGENT_STATE, agentstate)
+
+    @classmethod
+    def data_msg(cls, data):
+        return cls(cls.DATA, data)

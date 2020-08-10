@@ -11,7 +11,7 @@ import serial
 from pyproj import Geod
 
 import init_agent
-from hwagent.constants import Devices, HWStates, AgentStatus
+from hwagent.constants import HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
@@ -34,9 +34,6 @@ class GPSAgent(AbstractHWAgent):
         self.output_file_header = ";".join([k for k in self.datapoint.keys()])
         self.sim_acceleration_sign = 1  # Usado para simular aceleración y frenado
         self.geod = Geod(ellps='WGS84')
-
-    def _get_device_name(self):
-        return Devices.GPS
 
     def _agent_process_manager_message(self, msg):
         pass

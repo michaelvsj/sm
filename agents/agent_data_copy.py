@@ -9,7 +9,7 @@ from os import walk, path, sync
 
 import init_agent
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from hwagent.constants import Devices, HWStates, AgentStatus
+from hwagent.constants import HWStates, AgentStatus
 from messaging.messaging import Message
 from bdd import DBInterface
 
@@ -22,9 +22,6 @@ class DataCopy(AbstractHWAgent):
         self.output_file_is_binary = False
         self.database = ''
         self.dbi = None
-
-    def _get_device_name(self):
-        return Devices.PENDRIVE
 
     def _agent_process_manager_message(self, msg):
         if msg.typ == Message.DATA:

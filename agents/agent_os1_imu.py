@@ -25,9 +25,6 @@ class OS1IMUAgent(AbstractHWAgent):
         self.sensor_ip = ""
         self.host_ip = ""
 
-    def _get_device_name(self):
-        return Devices.OS1_IMU
-
     def _agent_process_manager_message(self, msg):
         pass
 

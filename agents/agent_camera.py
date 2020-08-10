@@ -9,7 +9,7 @@ import subprocess
 
 import init_agent
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from hwagent.constants import Devices, HWStates, AgentStatus
+from hwagent.constants import HWStates, AgentStatus
 
 IMAGES_FOLDER = "img"
 
@@ -20,9 +20,6 @@ class CameraAgent(AbstractHWAgent):
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
-
-    def _get_device_name(self):
-        return Devices.CAMERA
 
     def _agent_process_manager_message(self, msg):
         pass

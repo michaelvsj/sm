@@ -9,7 +9,7 @@ from threading import Thread
 import serial
 
 import init_agent
-from hwagent.constants import HWStates, AgentStatus, Devices
+from hwagent.constants import HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
 
@@ -36,6 +36,15 @@ ADC_VALUE_TO_VOLTS = 5.0 / 1023.0
 BUTTONS = ('bNoButton', 'bSingleButton', 'b+', 'b-', 'b<', 'b>', 'bMute', 'bGPS', 'bStop', 'bPickup', 'bHangup', 'bM')
 
 
+class Devices:
+    OS1 = "OS1"
+    GPS = "GPS"
+    IMU = "IMU"
+    CAMERA = "CAMERA"
+    ROUTER = "ROUTER"
+    PENDRIVE = "PENDRIVE"
+
+
 class AtmegaAgent(AbstractHWAgent):
     def __init__(self, config_file):
         self.agent_name = os.path.basename(__file__).split(".")[0]
@@ -50,7 +59,7 @@ class AtmegaAgent(AbstractHWAgent):
         self.devices_leds = dict()
         self.quitting = False
         self.keys = dict()
-        self.devices_leds[Devices.OS1_LIDAR] = LED_DEV_OS1
+        self.devices_leds[Devices.OS1] = LED_DEV_OS1
         self.devices_leds[Devices.GPS] = LED_DEV_GPS
         self.devices_leds[Devices.IMU] = LED_DEV_IMU
         self.devices_leds[Devices.CAMERA] = LED_DEV_CAM
@@ -207,17 +216,18 @@ class AtmegaAgent(AbstractHWAgent):
             elif msg.arg == Message.SYS_EXT_DRIVE_FULL:
                 self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + BLINK)
 
-        # LEDs de status de equipos
-        elif msg.typ == Message.DEVICE_STATE:
-            device = msg.arg["device"]
-            status = msg.arg["state"]
-            if status == HWStates.NOT_CONNECTED:  # Si no está conectado
-                self.ser.write(START_OF_TEXT + self.devices_leds[device] + ON)  # Enciende LED
-            elif status == HWStates.ERROR:  # Si está conectado, pero con error
-                self.ser.write(
-                    START_OF_TEXT + self.devices_leds[device] + BLINK)  # Hace pestañar el LED
-            else:  # Si está conectado y sin error
-                self.ser.write(START_OF_TEXT + self.devices_leds[device] + OFF)  # Apaga el LED
+        # LEDs de status de equipos. Se envía usando mensaje tipo DATA
+        elif msg.typ == Message.DATA:
+            if isinstance(msg.arg, dict):
+                device = msg.arg["device"]
+                status = msg.arg["state"]
+                if status == HWStates.NOT_CONNECTED:  # Si no está conectado
+                    self.ser.write(START_OF_TEXT + self.devices_leds[device] + ON)  # Enciende LED
+                elif status == HWStates.ERROR:  # Si está conectado, pero con error
+                    self.ser.write(
+                        START_OF_TEXT + self.devices_leds[device] + BLINK)  # Hace pestañar el LED
+                else:  # Si está conectado y sin error
+                    self.ser.write(START_OF_TEXT + self.devices_leds[device] + OFF)  # Apaga el LED
 
     def __turn_off_leds_now(self):
         self.ser.write(START_OF_TEXT + LED_ONLINE + OFF)

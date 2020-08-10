@@ -42,9 +42,6 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_invalid = 0
         self.active_channels = ()
 
-    def _get_device_name(self):
-        return Devices.OS1_LIDAR
-
     def _agent_process_manager_message(self, msg):
         pass
 

@@ -1,14 +1,3 @@
-
-class Devices:
-    OS1_LIDAR = "OS1_LIDAR"
-    OS1_IMU = "OS1_IMU"
-    GPS = "GPS"
-    IMU = "IMU"
-    CAMERA = "CAMERA"
-    ROUTER = "ROUTER"
-    PENDRIVE = "PENDRIVE"
-
-
 class HWStates:
     """
     Contiene los estados (mutuamente excluyentes) posibles de los equipos de hardware

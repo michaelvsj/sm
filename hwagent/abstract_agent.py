@@ -9,7 +9,7 @@ from collections import deque
 import socket
 from threading import Thread, Event
 from messaging.messaging import Message
-from hwagent.constants import HWStates, Devices, AgentStatus
+from hwagent.constants import HWStates, AgentStatus
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
@@ -199,7 +199,7 @@ class AbstractHWAgent(ABC):
                     elif msg.arg == Message.CMD_QUERY_AGENT_STATE:
                         self.__manager_send(Message.agent_state(self.state).serialize())
                     elif msg.arg == Message.CMD_QUERY_HW_STATE:
-                        self.__manager_send(Message.device_state(self._get_device_name(), self.hw_state).serialize())
+                        self.__manager_send(Message.agent_hw_state(self.hw_state).serialize())
                     elif msg.arg == Message.CMD_QUIT:
                         self.flag_quit.set()
                         break
@@ -228,14 +228,6 @@ class AbstractHWAgent(ABC):
             self.connection.close()
             self.__sock.close()
             self.logger.info("Aplicación terminada")
-
-    @abstractmethod
-    def _get_device_name(self):
-        """
-
-        :return: El identificador del hardware asociado al agente. Debe estar definifo en devices.Devices
-        """
-        pass
 
     @abstractmethod
     def _agent_process_manager_message(self, msg: Message):

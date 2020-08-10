@@ -11,9 +11,10 @@ from enum import Enum, auto
 import logging, logging.config
 import os
 from bdd import DBInterface, EstatusDelTramo
-from constants import Devices
+from agents.agent_atmega import Devices
 from messaging.messaging import Message, AgentStatus
 from messaging.agents_interface import AgentInterface
+from hwagent.constants import HWStates
 from queue import SimpleQueue
 from utils import get_time_str, get_date_str, Coords, get_new_folio
 
@@ -50,6 +51,7 @@ class AgentProxies:
     """
     ES IMPERATIVO QUE LOS NOMBRES DE LOS AGENTES COINCIDAN CON LOS DE LA CONFIGURACIÓN
     """
+
     def __init__(self):
         self.OS1_LIDAR = AgentInterface("os1_lidar")
         self.OS1_IMU = AgentInterface("os1_imu")
@@ -149,12 +151,12 @@ class FRAICAPManager:
 
         # Espera a que agentes se conecten
         self.logger.info("Esperando conexión a agentes")
-        for name, agt in self.agents.items():
+        for agt in self.agents.items():
             if agt.enabled:
-                self.logger.info(f"Conectando a agente {name}")
+                self.logger.info(f"Conectando a agente {agt.name}")
                 while not agt.is_connected():
                     time.sleep(0.01)
-                self.logger.info(f"Agente {name} conectado")
+                self.logger.info(f"Agente {agt.name} conectado")
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
@@ -177,15 +179,18 @@ class FRAICAPManager:
     def check_hw(self):
         while not self.flag_quit.is_set():
             if self.agents.OS1_LIDAR.enabled:
-                self.agents.ATMEGA.send_msg(Message.device_state(Devices.OS1_LIDAR, self.agents.OS1_LIDAR.hw_status))
+                self.agents.ATMEGA.send_data({"device": Devices.OS1, "status": self.agents.OS1_LIDAR.hw_status})
             if self.agents.IMU.enabled:
-                self.agents.ATMEGA.send_msg(Message.device_state(Devices.IMU, self.agents.IMU.hw_status))
+                self.agents.ATMEGA.send_data({"device": Devices.IMU, "status": self.agents.IMU.hw_status})
             if self.agents.CAMERA.enabled:
-                self.agents.ATMEGA.send_msg(Message.device_state(Devices.CAMERA, self.agents.CAMERA.hw_status))
+                self.agents.ATMEGA.send_data({"device": Devices.CAMERA, "status": self.agents.CAMERA.hw_status})
             if self.agents.GPS.enabled:
-                self.agents.ATMEGA.send_msg(Message.device_state(Devices.GPS, self.agents.GPS.hw_status))
+                self.agents.ATMEGA.send_data({"device": Devices.GPS, "status": self.agents.GPS.hw_status})
             if self.agents.INET.enabled:
-                self.agents.ATMEGA.send_msg(Message.device_state(Devices.ROUTER, self.agents.INET.hw_status))
+                self.agents.ATMEGA.send_data({"device": Devices.ROUTER, "status": self.agents.INET.hw_status})
+            for agt in self.agents.items():
+                if agt.enabled and agt.hw_status != HWStates.NOMINAL:
+                    self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
             time.sleep(1)
 
     def check_spacetime(self):
@@ -237,7 +242,7 @@ class FRAICAPManager:
     def check_agents_ready(self):
         while not self.flag_quit.is_set():
             all_ready = True
-            for name, agt in self.agents.items():
+            for agt in self.agents.items():
                 if agt.enabled:
                     if agt.agent_status != AgentStatus.STAND_BY and agt.agent_status != AgentStatus.CAPTURING:
                         all_ready = False
