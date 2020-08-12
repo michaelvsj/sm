@@ -9,7 +9,8 @@ import errno
 import numpy as np
 import sys
 
-from hwagent.constants import HWStates, Devices, AgentStatus
+import init_agent
+from hwagent.constants import HWStates, AgentStatus
 from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack

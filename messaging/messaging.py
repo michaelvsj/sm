@@ -1,5 +1,5 @@
 import yaml
-from hwagent.constants import AgentStatus, Devices, HWStates
+from hwagent.constants import AgentStatus, HWStates
 
 
 class Message:
@@ -125,7 +125,7 @@ class Message:
 
     @classmethod
     def agent_hw_state(cls, hwstate):
-        assert hwstate in HWStates.__dict__.keys(), "state debe estar definido en devices.HWStates"
+        assert hwstate in HWStates.__dict__.keys(), "'hwstate' debe estar definido en constants.HWStates"
         return cls(cls.HW_STATE, hwstate)
 
     @classmethod

@@ -9,7 +9,7 @@ from threading import Thread
 import serial
 
 import init_agent
-from hwagent.constants import HWStates, AgentStatus
+from hwagent.constants import HWStates, AgentStatus, Devices
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
 
@@ -34,15 +34,6 @@ TOLERANCE = 0.1
 ADC_VALUE_TO_VOLTS = 5.0 / 1023.0
 
 BUTTONS = ('bNoButton', 'bSingleButton', 'b+', 'b-', 'b<', 'b>', 'bMute', 'bGPS', 'bStop', 'bPickup', 'bHangup', 'bM')
-
-
-class Devices:
-    OS1 = "OS1"
-    GPS = "GPS"
-    IMU = "IMU"
-    CAMERA = "CAMERA"
-    ROUTER = "ROUTER"
-    PENDRIVE = "PENDRIVE"
 
 
 class AtmegaAgent(AbstractHWAgent):

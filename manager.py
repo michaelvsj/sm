@@ -10,11 +10,11 @@ from threading import Thread, Event
 from enum import Enum, auto
 import logging, logging.config
 import os
+
 from bdd import DBInterface, EstatusDelTramo
-from agents.agent_atmega import Devices
 from messaging.messaging import Message, AgentStatus
 from messaging.agents_interface import AgentInterface
-from hwagent.constants import HWStates
+from hwagent.constants import HWStates, Devices
 from queue import SimpleQueue
 from utils import get_time_str, get_date_str, Coords, get_new_folio
 
@@ -173,9 +173,6 @@ class FRAICAPManager:
         self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
         Thread(target=self.check_spacetime, name="check_spacetime", daemon=True).start()
 
-        self.logger.info("Iniciando thread de reporte de estado de hardware")
-        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
-
     def check_hw(self):
         while not self.flag_quit.is_set():
             if self.agents.OS1_LIDAR.enabled:
@@ -262,15 +259,15 @@ class FRAICAPManager:
     def start_capture(self):
         self.logger.info("Iniciando captura")
         self.new_segment()
-        for name, agent in self.agents.items():
-            if agent.enabled:
-                agent.send_msg(Message.cmd_start_capture())
+        for agt in self.agents.items():
+            if agt.enabled:
+                agt.send_msg(Message.cmd_start_capture())
 
     def end_capture(self):
         self.logger.info("Terminando captura")
-        for name, agent in self.agents.items():
-            if agent.enabled:
-                agent.send_msg(Message.cmd_end_capture())
+        for agt in self.agents.items():
+            if agt.enabled:
+                agt.send_msg(Message.cmd_end_capture())
 
     def new_segment(self):
         self.segment_coords_ini = self.coordinates
@@ -278,9 +275,9 @@ class FRAICAPManager:
         self.segment_current_init_time = time.time()
         self.segment_current_id = get_new_folio()
         self.capture_dir = self.get_new_capture_folder()
-        for name, agent in self.agents.items():
-            if agent.enabled:
-                agent.send_msg(Message.set_folder(self.capture_dir))
+        for agt in self.agents.items():
+            if agt.enabled:
+                agt.send_msg(Message.set_folder(self.capture_dir))
 
     def update_segment_record(self):
         """
@@ -297,7 +294,8 @@ class FRAICAPManager:
         lat_ini = self.segment_coords_ini.lat
         self.logger.debug(f"Folio: {self.segment_current_id}, duración: {duracion}, distancia: {distancia}")
         self.dbi.save_capture(folio=self.segment_current_id,
-                              carpeta=duracion,
+                              carpeta=self.capture_dir,
+                              duracion=duracion,
                               distancia=distancia,
                               lon_ini=lon_ini,
                               lat_ini=lat_ini,
@@ -307,16 +305,19 @@ class FRAICAPManager:
     def get_new_capture_folder(self):
         folder = os.path.join(os.path.join(self.capture_dir_base, get_date_str()), get_time_str())
         os.makedirs(folder, exist_ok=True)
-        self.logger.info("Nueva carpeta de destino: {folder}")
+        self.logger.info(f"Nueva carpeta de destino: {folder}")
         return folder
 
     def end_agents(self):
-        for name, agent in self.agents.items():
-            if agent.enabled:
-                agent.send_msg(Message.cmd_quit())
+        for agt in self.agents.items():
+            if agt.enabled:
+                agt.send_msg(Message.cmd_quit())
 
     def run(self):
-        self.initialize()
+        try:
+            self.initialize()
+        except KeyboardInterrupt:
+            sys.exit(0)
 
         self.logger.info("Esperando que agentes estén listos para capturar")
         try:
@@ -324,6 +325,9 @@ class FRAICAPManager:
                 time.sleep(0.1)
         except KeyboardInterrupt:
             sys.exit(0)
+
+        self.logger.info("Iniciando thread de reporte de estado de hardware")
+        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
 
         # Informa al agent_data_copy la ubicación de la base de datos
         self.agents.DATA_COPY.send_msg(Message(Message.DATA, self.mgr_cfg['sqlite']['db_file']))
@@ -366,4 +370,4 @@ class FRAICAPManager:
             except KeyboardInterrupt:
                 self.flag_quit.set()
 
-            self.end_agents()
+        self.end_agents()

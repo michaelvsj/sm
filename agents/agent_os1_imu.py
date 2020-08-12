@@ -7,7 +7,7 @@ from threading import Thread, Event
 import time
 import sys
 import init_agent
-from hwagent.constants import Devices, HWStates, AgentStatus
+from hwagent.constants import HWStates, AgentStatus
 from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from os1.imu_packet import PACKET_SIZE, unpack as unpack_imu
 

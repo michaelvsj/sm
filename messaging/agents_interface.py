@@ -79,6 +79,7 @@ class AgentInterface:
                         cmd = b''
                     else:
                         cmd += bt
+                        self.logger.info(f"Mensaje recibido desde agente {self.name}: {cmd.decode('ascii')}")
                 except TimeoutError:
                     pass
                 except ConnectionResetError:
@@ -110,5 +111,7 @@ class AgentInterface:
                 return True
             except BrokenPipeError:
                 self.logger.error(f"No se pudo enviar el mensaje al puerto {self.__ip_port}: BrokenPipe.")
+            except ConnectionResetError:
+                self.logger.error(f"Agente desconectado")
         else:
             return False

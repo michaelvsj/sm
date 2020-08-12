@@ -1,3 +1,12 @@
+class Devices:
+    OS1 = "OS1"
+    GPS = "GPS"
+    IMU = "IMU"
+    CAMERA = "CAMERA"
+    ROUTER = "ROUTER"
+    PENDRIVE = "PENDRIVE"
+
+
 class HWStates:
     """
     Contiene los estados (mutuamente excluyentes) posibles de los equipos de hardware

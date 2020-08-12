@@ -10,9 +10,13 @@ import sys
 import os
 
 if __name__ == "__main__":
+    this_path = os.path.dirname(os.path.realpath(__file__))
+    sys.path.append(this_path + os.sep + "agents")
+    sys.path.append(this_path + os.sep + "hwagents")
+
     os.makedirs("logs", exist_ok=True)
-    manager_config_file = "config.yaml"
-    agents_config_file = "agents/config.yaml"
+    manager_config_file = this_path + os.sep + "config.yaml"
+    agents_config_file = this_path + os.sep + "agents/config.yaml"
     if len(sys.argv) > 1:
         manager_config_file = sys.argv[1]
     if len(sys.argv) > 2:
