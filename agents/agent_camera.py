@@ -8,8 +8,8 @@ from threading import Thread, Event
 import subprocess
 
 import init_agent
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from hwagent.constants import HWStates, AgentStatus
+from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from constants import HWStates, AgentStatus
 
 IMAGES_FOLDER = "img"
 

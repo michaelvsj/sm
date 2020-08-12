@@ -3,12 +3,13 @@ import logging
 import os
 import socket
 from pathlib import Path
-from threading import Thread, Event
+from threading import Thread
 import time
 import sys
+
 import init_agent
-from hwagent.constants import HWStates, AgentStatus
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from constants import AgentStatus
+from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from os1.imu_packet import PACKET_SIZE, unpack as unpack_imu
 
 IMU_UDP_PORT = 7503

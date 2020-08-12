@@ -8,8 +8,8 @@ from threading import Thread
 from os import walk, path, sync
 
 import init_agent
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
-from hwagent.constants import HWStates, AgentStatus
+from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from constants import AgentStatus
 from messaging.messaging import Message
 from bdd import DBInterface
 
@@ -22,6 +22,7 @@ class DataCopy(AbstractHWAgent):
         self.output_file_is_binary = False
         self.database = ''
         self.dbi = None
+        self.drive_connected = False
 
     def _agent_process_manager_message(self, msg):
         if msg.typ == Message.DATA:
@@ -91,7 +92,7 @@ class DataCopy(AbstractHWAgent):
         pass
 
     def _agent_connect_hw(self):
-        pass
+        return True
 
     def _agent_reset_hw_connection(self):
         pass

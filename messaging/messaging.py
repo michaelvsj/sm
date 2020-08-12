@@ -1,5 +1,5 @@
 import yaml
-from hwagent.constants import AgentStatus, HWStates
+from agents.constants import AgentStatus, HWStates
 
 
 class Message:

@@ -11,7 +11,7 @@ class DBInterface:
 
     def __init__(self, db_file):
         self.db = db_file
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger("manager")
 
     def save_capture(self, folio, carpeta, duracion, distancia, lon_ini, lat_ini, lon_fin, lat_fin):
         timestamp = int(time.time())

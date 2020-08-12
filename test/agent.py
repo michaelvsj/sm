@@ -1,7 +1,7 @@
 from pathlib import Path
 import time
 
-from hwagent.abstract_agent import AbstractHWAgent, AgentStatus, Message, __States
+from abstract_agent import AbstractHWAgent, AgentStatus, Message, __States
 
 CONFIG_FILE = "config.yaml"
 

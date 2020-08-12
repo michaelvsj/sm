@@ -10,11 +10,11 @@ import numpy as np
 import sys
 
 import init_agent
-from hwagent.constants import HWStates, AgentStatus
+from constants import HWStates, AgentStatus
 from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 CONFIG_FILE = "config.yaml"
 LIDAR_UDP_PORT = 7502

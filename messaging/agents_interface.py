@@ -3,8 +3,8 @@ import time
 from threading import Thread
 import logging
 from queue import SimpleQueue
-from messaging.messaging import Message, AgentStatus
-from hwagent.constants import HWStates
+from messaging.messaging import Message
+from agents.constants import HWStates, AgentStatus
 
 
 class AgentInterface:

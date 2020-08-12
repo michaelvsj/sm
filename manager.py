@@ -14,7 +14,7 @@ import os
 from bdd import DBInterface, EstatusDelTramo
 from messaging.messaging import Message, AgentStatus
 from messaging.agents_interface import AgentInterface
-from hwagent.constants import HWStates, Devices
+from agents.constants import HWStates, Devices
 from queue import SimpleQueue
 from utils import get_time_str, get_date_str, Coords, get_new_folio
 
@@ -44,7 +44,7 @@ class States(Enum):
     STARTING = auto()
     STAND_BY = auto()
     CAPTURING = auto()
-    PAUSED = auto()
+    WAITING_SPEED = auto()
 
 
 class AgentProxies:
@@ -159,18 +159,26 @@ class FRAICAPManager:
                 self.logger.info(f"Agente {agt.name} conectado")
         self.logger.info("Conectado a todos los agentes habilitados")
 
-        self.logger.info("Iniciando thread de reporte de estado de hardware")
+        self.logger.info("Iniciando thread de reporte de estado de agentes")
         Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True).start()
 
-        self.logger.info("INICIANDO THREADS GENERADORES DE EVENTOS")
-        self.logger.info("Iniciando thread de lectura de teclado")
+        self.logger.info("Esperando que agentes estén listos para capturar")
+        while not self.flag_agents_ready.is_set():
+            time.sleep(0.1)
+        self.logger.info("Agentes listos")
+
+        self.logger.info("Iniciando thread de reporte de estado de hardware")
+        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
+
+        self.logger.info("Iniciando threads generadores de eventos")
+        self.logger.info("--Iniciando thread de lectura de teclado")
         Thread(target=self.get_keyboard_input, name="get_keyboard_input", daemon=True).start()
 
         if self.agents.ATMEGA.enabled:
-            self.logger.info("Iniciando thread de lectura de botones")
+            self.logger.info("--Iniciando thread de lectura de botones")
             Thread(target=self.get_buttons, name="get_buttons", daemon=True).start()
 
-        self.logger.info("Iniciando thread de monitoreo de avance y tiempo")
+        self.logger.info("--Iniciando thread de monitoreo de avance y tiempo")
         Thread(target=self.check_spacetime, name="check_spacetime", daemon=True).start()
 
     def check_hw(self):
@@ -243,6 +251,8 @@ class FRAICAPManager:
                 if agt.enabled:
                     if agt.agent_status != AgentStatus.STAND_BY and agt.agent_status != AgentStatus.CAPTURING:
                         all_ready = False
+                        self.logger.debug(f"Agente de {agt.name} reporta estado {agt.agent_status}")
+                        time.sleep(1)
             if all_ready:
                 self.flag_agents_ready.set()
             else:
@@ -319,16 +329,6 @@ class FRAICAPManager:
         except KeyboardInterrupt:
             sys.exit(0)
 
-        self.logger.info("Esperando que agentes estén listos para capturar")
-        try:
-            while not self.flag_agents_ready.is_set():
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            sys.exit(0)
-
-        self.logger.info("Iniciando thread de reporte de estado de hardware")
-        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
-
         # Informa al agent_data_copy la ubicación de la base de datos
         self.agents.DATA_COPY.send_msg(Message(Message.DATA, self.mgr_cfg['sqlite']['db_file']))
 
@@ -345,24 +345,26 @@ class FRAICAPManager:
                     if cmd == KEY_QUIT:
                         self.flag_quit.set()
                     elif cmd == KEY_START_STOP:
-                        if self.state == States.CAPTURING or self.state == States.PAUSED:
+                        if self.state == States.CAPTURING or self.state == States.WAITING_SPEED:
                             self.end_capture()
                             self.state = States.STAND_BY
                         elif self.state == States.STAND_BY:
-                            self.start_capture()
-                            self.state = States.CAPTURING
+                            self.state = States.WAITING_SPEED
+                            self.events.vehicle_resumed.clear()
                 elif self.events.segment_ended.isSet():
                     if self.state == States.CAPTURING:
                         self.update_segment_record()
                         self.new_segment()
                     self.events.segment_ended.clear()
                 elif self.events.vehicle_stopped.is_set():
+                    self.logger.info("Flag vehicle_stopped seteado")
                     if self.state == States.CAPTURING:
                         self.end_capture()
-                        self.state = States.PAUSED
+                        self.state = States.WAITING_SPEED
                     self.events.vehicle_stopped.clear()
                 elif self.events.vehicle_resumed.is_set():
-                    if self.state == States.PAUSED:
+                    self.logger.info("Flag vehicle_resumed seteado")
+                    if self.state == States.WAITING_SPEED:
                         self.start_capture()
                         self.state = States.CAPTURING
                     self.events.vehicle_resumed.clear()

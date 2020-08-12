@@ -9,8 +9,8 @@ from threading import Thread
 import serial
 
 import init_agent
-from hwagent.constants import HWStates, AgentStatus, Devices
-from hwagent.abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from constants import HWStates, AgentStatus, Devices
+from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from messaging.messaging import Message
 
 DEFAULT_COM_PORT = '/dev/ttyARD0'

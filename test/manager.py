@@ -1,9 +1,7 @@
 import socket
 import time
 from pathlib import Path
-import yaml
-from hwagent.abstract_agent import AgentStatus, Message
-from constants import Devices, HWStates
+from abstract_agent import AgentStatus, Message
 from threading import Thread
 
 Path('logs').mkdir(exist_ok=True)

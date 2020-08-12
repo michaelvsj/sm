@@ -9,7 +9,7 @@ from collections import deque
 import socket
 from threading import Thread, Event
 from messaging.messaging import Message
-from hwagent.constants import HWStates, AgentStatus
+from agents.constants import HWStates, AgentStatus
 
 TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
@@ -71,6 +71,7 @@ class AbstractHWAgent(ABC):
                 self.hw_state = HWStates.NOMINAL
                 return True
             else:
+                time.sleep(1)
                 attempts += 1
         return False
 
@@ -165,6 +166,8 @@ class AbstractHWAgent(ABC):
             self.connection.sendall(msg)
         except BrokenPipeError:
             pass
+        except OSError:
+            self.logger.exception("")
 
     def _send_data_to_mgr(self, data):
         msg = Message(_type=Message.DATA, arg=data).serialize()

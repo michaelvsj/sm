@@ -5,21 +5,21 @@ agent_os1_lidar:
   manager_port: 0
   local_port: 30001
   output_file_name: lidar.bin
-  hw_connection_retries: 5
+  hw_connection_retries: 100
   sensor_ip: 192.168.0.19 #IP del lidar
   host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 agent_os1_imu:
   manager_port: 0
   local_port: 30002
   output_file_name: imu_lidar.csv
-  hw_connection_retries: 5
+  hw_connection_retries: 100
   sensor_ip: 192.168.0.19 #IP del lidar
   host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 agent_gps:
   manager_port: 0
   local_port: 30003
   output_file_name: gps.csv
-  hw_connection_retries: 5
+  hw_connection_retries: 100
   com_port: /dev/ttyACM1 #/dev/ttyGPS0
   usb_id: 067b:2303
   baudrate: 4800
@@ -28,7 +28,7 @@ agent_camera:
   manager_port: 0
   local_port: 30004
   output_file_name:
-  hw_connection_retries: 5
+  hw_connection_retries: 100
   dev_file: /dev/video0
   period: 1
   resolution: 640x480
@@ -36,7 +36,7 @@ agent_imu:
   manager_port: 0
   local_port: 30005
   output_file_name: yost_3space_imu.csv
-  hw_connection_retries: 5
+  hw_connection_retries: 100
   sample_rate: 200 #Hz
   usb_id: 2476:1010
   com_port: /dev/ttyACM2
