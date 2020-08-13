@@ -194,7 +194,6 @@ class AbstractHWAgent(ABC):
                 time.sleep(0.01)
                 if len(self.dq_from_mgr):
                     msg = self.dq_from_mgr.pop()
-                    self.logger.info(f"Comando recibido desde manager: {msg.typ}, {msg.arg}")
                     if msg.arg == Message.CMD_END_CAPTURE:
                         self.state = AgentStatus.STAND_BY
                     elif msg.arg == Message.CMD_START_CAPTURE:

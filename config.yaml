@@ -11,8 +11,8 @@ capture:
   output_path: /home/mich/temp/capture #/mnt/data/capture
   splitting_distance: 50 #metros
   splitting_time: 60 #segundos. Tiempo máximo antes de subdividir una captura. Generalmente se gatilla cuando GPS falla (o si vehículo va muy lento)
-  pause_speed: 0.3 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
-  resume_speed: 0.8 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
+  pause_speed: 0.5 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
+  resume_speed: 3 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
 sqlite:
   db_file: /home/mich/temp/capture/fraicap.sqlite #/home/frai/sw/fraicap.sqlite
 
@@ -22,6 +22,9 @@ logging:
   formatters:
     simple:
       format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    simpler:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      datefmt: "%H:%M:%S"
   handlers:
     root_handler:
       class: logging.NullHandler
@@ -37,7 +40,7 @@ logging:
     console_handler:
       class: logging.StreamHandler
       level: INFO
-      formatter: simple
+      formatter: simpler
   loggers:
     manager:
       handlers: [my_handler, console_handler]

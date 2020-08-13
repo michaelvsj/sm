@@ -1,6 +1,6 @@
 """
-Por defecto usa las configuraciones config.yml de la carpeta actual
-y agents/config.yml para conocer las direcciones IP de los agentes
+Por defecto usa las configuraciones config.yaml de la carpeta actual
+y agents/config.yaml para conocer las direcciones IP de los agentes
 Estas configs se pueden pisar pasandoselas como argumento de ejecución (en el mismo orden),
 por ejemplo para efectos de testing
 """

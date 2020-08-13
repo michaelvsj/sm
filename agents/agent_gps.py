@@ -16,7 +16,7 @@ from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
 RMC_FIELDS = ["latitude", "longitude", "timestamp", "spd_over_grnd", "true_course"]
-GGA_FIELDS = ["gps_qual", "num_sats"]
+GGA_FIELDS = ["gps_qual", "num_sats", "horizontal_dil"]
 READ_TIMEOUT = 1.5
 
 
