@@ -17,10 +17,10 @@ class AgentInterface:
         self.__sock.setblocking(True)
         self.__connected = False
         self.q_data_in = SimpleQueue()
-        self.agent_status = AgentStatus.NOT_RESPONDING
+        self.agent_status = AgentStatus.STARTING
         self.hw_status = HWStates.NOT_CONNECTED
         self.enabled = False
-        self.logger = logging.getLogger("AgentInterface")
+        self.logger = logging.getLogger("manager")
 
     def set_ip_address(self, addr, port):
         self.__ip_adress = addr
@@ -51,7 +51,7 @@ class AgentInterface:
             except ConnectionRefusedError:
                 if not error:
                     error = True
-                    self.logger.warning(f"Conection rechazada a {self.__ip_adress}:{self.__ip_port}. Reintentando")
+                    self.logger.warning(f"Conexión rechazada a {self.__ip_adress}:{self.__ip_port}. Reintentando.")
                 time.sleep(1)
             except Exception:
                 if not error:
@@ -79,7 +79,6 @@ class AgentInterface:
                         cmd = b''
                     else:
                         cmd += bt
-                        self.logger.info(f"Mensaje recibido desde agente {self.name}: {cmd.decode('ascii')}")
                 except TimeoutError:
                     pass
                 except ConnectionResetError:

@@ -122,6 +122,10 @@ class AbstractHWAgent(ABC):
                     pass
             else:
                 time.sleep(0.1)
+        try:
+            self.output_file.close()
+        except:
+            pass
 
     def __manager_connect(self):
         self.logger.info("Esperando conexión de manager")

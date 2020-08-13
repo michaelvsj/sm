@@ -146,6 +146,7 @@ class FRAICAPManager:
             if agt.enabled:
                 pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"]).pid
                 self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
+                time.sleep(0.1)  # Le da tiempo para partir antes de intentar conexión
                 agt.connect()
 
         # Espera a que agentes se conecten

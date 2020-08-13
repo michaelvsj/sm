@@ -5,14 +5,14 @@ use_agents:
   os1_lidar: False   # LiDAR
   os1_imu: False   # IMU interna del LiDAR. Si se habilita, también debe estar habilitado os1_lidar
   data_copy: True  # Copiador de datos crudos a pendrive
-  inet: False  # Agente que chequea la conexión a internet
+  inet: True  # Agente que chequea la conexión a internet
   atmega: False  # I/O de usuario via leds y botones
 capture:
   output_path: /home/mich/temp/capture #/mnt/data/capture
   splitting_distance: 50 #metros
-  splitting_time: 60 #segundos. Tiempo máximo antes de subdividir una captura. Generalmente se gatilla cuando GPS falla (o si vehículo va muy lento)
-  pause_speed: 0.5 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
-  resume_speed: 3 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
+  splitting_time: 30 #segundos. Tiempo máximo antes de subdividir una captura. Generalmente se gatilla cuando GPS falla (o si vehículo va muy lento)
+  pause_speed: -0.5 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
+  resume_speed: 0.1 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
 sqlite:
   db_file: /home/mich/temp/capture/fraicap.sqlite #/home/frai/sw/fraicap.sqlite
 
