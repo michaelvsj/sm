@@ -85,6 +85,7 @@ class FRAICAPManager:
         self.set_up(manager_config_file, agents_config_file)
         self.session = None # Identificador de sesión de captura. La sesión inicia y termina con el apriete del boton (o tecla 's')
         self.segment = 0000 # Identificador del segmento dentro de la sesión. Número correlativo
+        self.sys_id = 'NN'
 
     def set_up(self, manager_config_file, agents_config_file):
         try:
@@ -136,6 +137,8 @@ class FRAICAPManager:
         :return:
         """
         self.sys_id = self.dbi.get_system_id()
+        if not self.sys_id:
+            self.logger.warning(f"No fue posible obtener 'sys_id' de la base de datos. Usando valor '{self.sys_id}'.")
         self.state = States.STARTING
         if os.name == 'posix':
             python_exec = os.path.join(sys.exec_prefix, 'bin', 'python')
@@ -165,6 +168,9 @@ class FRAICAPManager:
                 self.logger.info(f"Agente {agt.name} conectado")
         self.logger.info("Conectado a todos los agentes habilitados")
 
+        self.logger.info("Iniciando thread de reporte de estado de hardware")
+        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
+
         self.logger.info("Iniciando thread de reporte de estado de agentes")
         Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True).start()
 
@@ -172,9 +178,6 @@ class FRAICAPManager:
         while not self.flags.agents_ready.is_set():
             time.sleep(0.1)
         self.logger.info("Agentes listos")
-
-        self.logger.info("Iniciando thread de reporte de estado de hardware")
-        Thread(target=self.check_hw, name="check_hw", daemon=True).start()
 
         self.logger.info("Iniciando threads generadores de eventos")
         self.logger.info("--Iniciando thread de lectura de teclado")
@@ -189,6 +192,7 @@ class FRAICAPManager:
 
     def check_hw(self):
         while not self.flags.quit.is_set():
+            self.flags.quit.wait(10)
             if self.agents.OS1_LIDAR.enabled:
                 self.agents.ATMEGA.send_data({"device": Devices.OS1, "status": self.agents.OS1_LIDAR.hw_status})
             if self.agents.IMU.enabled:
@@ -200,9 +204,8 @@ class FRAICAPManager:
             if self.agents.INET.enabled:
                 self.agents.ATMEGA.send_data({"device": Devices.ROUTER, "status": self.agents.INET.hw_status})
             for agt in self.agents.items():
-                if agt.enabled and agt.hw_status != HWStates.NOMINAL:
+                if agt.enabled and agt.agent_status != AgentStatus.STARTING and agt.hw_status != HWStates.NOMINAL:
                     self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
-            self.flags.quit.wait(10)
 
     def check_spacetime(self):
         while not self.flags.quit.is_set():
@@ -222,9 +225,7 @@ class FRAICAPManager:
                 dist = float(gps_datapoint['distance_delta'])
                 speed = float(gps_datapoint['spd_over_grnd'])
                 self.segment_current_length += dist
-                self.logger.debug(
-                    f"GPS: Dist: {dist}, Speed:{speed}, "
-                    f"Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
+                # self.logger.debug(f"GPS: Dist: {dist}, Spd:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
 
                 # Pausa por detención
                 if speed < self.mgr_cfg['capture']['pause_speed']:
@@ -347,7 +348,7 @@ class FRAICAPManager:
             try:
                 if self.flags.new_command.is_set():
                     cmd = self.q_user_commands.get()
-                    self.logger.info(f"Procesando comando de usuario: '{cmd}'")
+                    self.logger.debug(f"Procesando comando de usuario: '{cmd}'")
                     if self.q_user_commands.empty():
                         self.flags.new_command.clear()
                     if cmd == KEY_QUIT:

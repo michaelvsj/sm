@@ -66,12 +66,12 @@ class AbstractHWAgent(ABC):
 
     def __hw_connect_insist(self):
         attempts = 0
-        while attempts < self.hw_connections_retries:
+        while attempts < self.hw_connections_retries and not self.flag_quit.is_set():
             if self._agent_connect_hw():
                 self.hw_state = HWStates.NOMINAL
                 return True
             else:
-                time.sleep(1)
+                self.flag_quit.wait(1)
                 attempts += 1
         return False
 

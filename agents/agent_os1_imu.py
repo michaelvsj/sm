@@ -95,7 +95,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         cfg_file = sys.argv[1]
 
-    Path('logs').mkdir(exist_ok=True)
     agent = OS1IMUAgent(config_file=cfg_file)
     agent.set_up()
     agent.run()

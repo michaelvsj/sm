@@ -41,6 +41,9 @@ class DBInterface:
             self.logger.exception(
                 f"Error al obtener registros desde base de datos. Query: {sql}. Error: {str(e)}")
             return False
+        except sqlite3.OperationalError as e:
+            self.logger.error(str(e))
+            return False
 
     def get_copy_pending(self):
         sql = f"SELECT dir, num_folio FROM {DB_TABLE} WHERE estado != {EstatusDelTramo.CAPTURING.value}" \

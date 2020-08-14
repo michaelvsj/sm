@@ -78,7 +78,6 @@ class OS1LiDARAgent(AbstractHWAgent):
     def _agent_connect_hw(self):
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
         try:
             self.sock.bind((self.host_ip, LIDAR_UDP_PORT))
         except OSError as e:
@@ -92,8 +91,11 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.logger.info("Cargando parmámetros desde LiDAR ('beam intrinsics')")
         try:
             beam_intrinsics = json.loads(self.os1.get_beam_intrinsics())
-        except:
-            self.logger.exception(f"Error al intentar obtener beam_intrinsics. Posible desconexion")
+        except OSError as e:
+            if e.errno == errno.EHOSTUNREACH:
+                self.logger.error(f"No se puede acceder a la IP del LiDAR: 'No route to host'")
+            else:
+                self.logger.exception(f"Error al intentar obtener beam_intrinsics. Posible desconexion")
             return False
         beam_alt_angles = beam_intrinsics['beam_altitude_angles']
         beam_az_angles = beam_intrinsics['beam_azimuth_angles']
@@ -181,7 +183,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         cfg_file = sys.argv[1]
 
-    Path('logs').mkdir(exist_ok=True)
     agent = OS1LiDARAgent(config_file=cfg_file)
     agent.set_up()
     agent.run()

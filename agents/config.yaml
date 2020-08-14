@@ -6,14 +6,14 @@ agent_os1_lidar:
   local_port: 30001
   output_file_name: lidar.bin
   hw_connection_retries: 100
-  sensor_ip: 192.168.0.19 #IP del lidar
+  sensor_ip: 192.168.0.18 #IP del lidar
   host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 agent_os1_imu:
   manager_port: 0
   local_port: 30002
   output_file_name: imu_lidar.csv
   hw_connection_retries: 100
-  sensor_ip: 192.168.0.19 #IP del lidar
+  sensor_ip: 192.168.0.18 #IP del lidar
   host_ip: 192.168.0.31 #Ip de la interfaz de red donde se conecta el lidar
 agent_gps:
   manager_port: 0

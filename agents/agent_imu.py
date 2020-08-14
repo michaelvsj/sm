@@ -29,9 +29,6 @@ class IMUAgent(AbstractHWAgent):
         self.ser = None
         self.output_file_header = HEADER
 
-    def _get_device_name(self):
-        return Devices.IMU
-
     def _agent_process_manager_message(self, msg):
         pass
 
@@ -109,7 +106,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         cfg_file = sys.argv[1]
 
-    Path('logs').mkdir(exist_ok=True)
     agent = IMUAgent(config_file=cfg_file)
     agent.set_up()
     agent.run()
