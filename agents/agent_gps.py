@@ -145,7 +145,7 @@ class GPSAgent(AbstractHWAgent):
                     if self.__parse_nmea(decoded):
                         return True
                 except UnicodeDecodeError:
-                    pass
+                    self.logger.exception("")
 
     def __parse_nmea(self, _msg):
         try:

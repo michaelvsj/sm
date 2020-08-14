@@ -1,28 +1,27 @@
-"""
-La máquina de estados cambia de estado al ocurrir un evento (¿ y/o un cambio de estado en uno de los agentes? )
-"""
+import logging
+import logging.config
+import os
+import signal
+import sys
 import time
+from enum import Enum, auto
+from queue import SimpleQueue
 from subprocess import Popen
+from threading import Thread, Event
 
 import yaml
-import sys
-from threading import Thread, Event
-from enum import Enum, auto
-import logging, logging.config
-import os
 
-from bdd import DBInterface, EstatusDelTramo
-from messaging.messaging import Message, AgentStatus
-from messaging.agents_interface import AgentInterface
 from agents.constants import HWStates, Devices
-from queue import SimpleQueue
+from bdd import DBInterface
+from messaging.agents_interface import AgentInterface
+from messaging.messaging import Message, AgentStatus
 from utils import get_time_str, get_date_str, Coords, get_new_folio
 
 DEFAULT_CONFIG_FILE = 'config.yaml'
 LOCALHOST = '127.0.0.1'
 KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
 KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
-
+FORCE_START = 'f'  # inicia captura inmediatamente, sin esperar que vehículo inice movimiento
 
 class Flags:
     """
@@ -53,15 +52,15 @@ class AgentProxies:
     ES IMPERATIVO QUE LOS NOMBRES DE LOS AGENTES COINCIDAN CON LOS DE LA CONFIGURACIÓN
     """
 
-    def __init__(self):
-        self.OS1_LIDAR = AgentInterface("os1_lidar")
-        self.OS1_IMU = AgentInterface("os1_imu")
-        self.IMU = AgentInterface("imu")
-        self.GPS = AgentInterface("gps")
-        self.CAMERA = AgentInterface("camera")
-        self.ATMEGA = AgentInterface("atmega")
-        self.INET = AgentInterface("inet")
-        self.DATA_COPY = AgentInterface("data_copy")
+    def __init__(self, quit_flag):
+        self.OS1_LIDAR = AgentInterface("os1_lidar", quit_flag)
+        self.OS1_IMU = AgentInterface("os1_imu", quit_flag)
+        self.IMU = AgentInterface("imu", quit_flag)
+        self.GPS = AgentInterface("gps", quit_flag)
+        self.CAMERA = AgentInterface("camera", quit_flag)
+        self.ATMEGA = AgentInterface("atmega", quit_flag)
+        self.INET = AgentInterface("inet", quit_flag)
+        self.DATA_COPY = AgentInterface("data_copy", quit_flag)
 
     def items(self):
         return self.__dict__.values()
@@ -75,15 +74,17 @@ class FRAICAPManager:
         self.capture_dir_base = ""
         self.capture_dir = ""
         self.q_user_commands = SimpleQueue()  # Cola de comandos provenientes de de teclado o botonera
-        self.agents = AgentProxies()
+        self.agents = AgentProxies(self.flags.quit)
         self.dbi = None
         self.coordinates = Coords()
         self.segment_coords_ini = Coords()
         self.segment_current_length = 0
         self.segment_current_init_time = 0
-        self.segment_current_id = None
+        self.folio = None
         self.mgr_cfg = dict()
         self.set_up(manager_config_file, agents_config_file)
+        self.session = None # Identificador de sesión de captura. La sesión inicia y termina con el apriete del boton (o tecla 's')
+        self.segment = 0000 # Identificador del segmento dentro de la sesión. Número correlativo
 
     def set_up(self, manager_config_file, agents_config_file):
         try:
@@ -93,6 +94,7 @@ class FRAICAPManager:
             self.logger.error(f"Archivo de configuración {manager_config_file} no encontrado. Terminando.")
             sys.exit(-1)
         logging.config.dictConfig(self.mgr_cfg["logging"])
+        self.logger.info("***** INICIA PROGRAMA *****")
         try:
             with open(agents_config_file, 'r') as config_file:
                 agents_cfg = yaml.safe_load(config_file)
@@ -142,11 +144,14 @@ class FRAICAPManager:
             self.logger.error("No se pudo determinar sistema operativo")
             sys.exit(1)
         agents_working_dir = os.path.dirname(os.path.abspath(__file__)) + os.sep + "agents"
+        self.logger.info(f"Manager ejecutandose con PID {os.getpid()}")
         for agt in self.agents.items():
             if agt.enabled:
                 pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"]).pid
                 self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
-                time.sleep(0.1)  # Le da tiempo para partir antes de intentar conexión
+        time.sleep(0.5)  # Les da tiempo para partir antes de intentar conexión
+        for agt in self.agents.items():
+            if agt.enabled:
                 agt.connect()
 
         # Espera a que agentes se conecten
@@ -196,17 +201,17 @@ class FRAICAPManager:
             for agt in self.agents.items():
                 if agt.enabled and agt.hw_status != HWStates.NOMINAL:
                     self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
-            time.sleep(1)
+            self.flags.quit.wait(10)
 
     def check_spacetime(self):
         while not self.flags.quit.is_set():
+            self.flags.quit.wait(0.01)
             if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + \
                     self.mgr_cfg['capture']['splitting_time']:
                 self.logger.debug(
                     f"Tiempo acumulado en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} segundos. "
                     f"Seteando bandera para generar nuevo tramo")
                 self.flags.segment_ended.set()
-                time.sleep(0.01)
                 continue
 
             gps_datapoint = self.agents.GPS.get_data()
@@ -232,8 +237,6 @@ class FRAICAPManager:
                 if self.segment_current_length > self.mgr_cfg['capture']['splitting_distance']:
                     self.flags.segment_ended.set()
 
-                time.sleep(0.01)
-
     def get_buttons(self):
         while not self.flags.quit.is_set():
             b = self.agents.ATMEGA.get_data()
@@ -254,7 +257,7 @@ class FRAICAPManager:
                 self.flags.agents_ready.set()
             else:
                 self.flags.agents_ready.clear()
-            time.sleep(0.2)
+            self.flags.quit.wait(0.2)
 
     def get_keyboard_input(self):
         while not self.flags.quit.is_set():
@@ -262,16 +265,16 @@ class FRAICAPManager:
             if k:
                 self.q_user_commands.put(k[0])
                 self.flags.new_command.set()
+            if k == KEY_QUIT:
+                break
 
     def start_capture(self):
-        self.logger.info("Iniciando captura")
         self.new_segment()
         for agt in self.agents.items():
             if agt.enabled:
                 agt.send_msg(Message.cmd_start_capture())
 
     def end_capture(self):
-        self.logger.info("Terminando captura")
         for agt in self.agents.items():
             if agt.enabled:
                 agt.send_msg(Message.cmd_end_capture())
@@ -280,8 +283,10 @@ class FRAICAPManager:
         self.segment_coords_ini = self.coordinates
         self.segment_current_length = 0
         self.segment_current_init_time = time.time()
-        self.segment_current_id = get_new_folio()
+        self.folio = get_new_folio()
+        self.segment += 1
         self.capture_dir = self.get_new_capture_folder()
+        self.logger.info(f"Nuevo segmento: {self.session}/{self.segment:04d}")
         for agt in self.agents.items():
             if agt.enabled:
                 agt.send_msg(Message.set_folder(self.capture_dir))
@@ -299,8 +304,8 @@ class FRAICAPManager:
         lat_fin = self.coordinates.lat
         lon_ini = self.segment_coords_ini.lon
         lat_ini = self.segment_coords_ini.lat
-        self.logger.debug(f"Folio: {self.segment_current_id}, duración: {duracion}, distancia: {distancia}")
-        self.dbi.save_capture(folio=self.segment_current_id,
+        self.logger.debug(f"Folio: {self.folio}, duración: {duracion}, distancia: {distancia}")
+        self.dbi.save_capture(folio=self.folio,
                               carpeta=self.capture_dir,
                               duracion=duracion,
                               distancia=distancia,
@@ -310,15 +315,20 @@ class FRAICAPManager:
                               lat_fin=lat_fin)
 
     def get_new_capture_folder(self):
-        folder = os.path.join(os.path.join(self.capture_dir_base, get_date_str()), get_time_str())
+        str_seg = f"{self.segment:04d}"
+        folder = os.path.join(os.path.join(os.path.join(self.capture_dir_base, get_date_str()), self.session), str_seg)
         os.makedirs(folder, exist_ok=True)
-        self.logger.info(f"Nueva carpeta de destino: {folder}")
         return folder
 
     def end_agents(self):
         for agt in self.agents.items():
             if agt.enabled:
                 agt.send_msg(Message.cmd_quit())
+
+    def new_session(self):
+        self.session = get_time_str()
+        self.segment = 0
+        self.logger.info(f"Nueva sesión de captura: {self.session}")
 
     def run(self):
         try:
@@ -343,10 +353,20 @@ class FRAICAPManager:
                         self.flags.quit.set()
                     elif cmd == KEY_START_STOP:
                         if self.state == States.CAPTURING or self.state == States.WAITING_SPEED:
+                            self.logger.info("Sesión de captura finalizada por usuario")
                             self.end_capture()
                             self.state = States.STAND_BY
                         elif self.state == States.STAND_BY:
+                            self.logger.info("Sesión de captura iniciada por usuario. Esperando movimiento del vehículo")
+                            self.new_session()
                             self.state = States.WAITING_SPEED
+                    elif cmd == FORCE_START:
+                        if self.state == States.STAND_BY:
+                            self.logger.info(
+                                "Sesión de captura forzada (sin esperar velocidad) iniciada por usuario por el usuario.")
+                            self.new_session()
+                            self.start_capture()
+                            self.state = States.CAPTURING
                 elif self.flags.segment_ended.isSet():
                     if self.state == States.CAPTURING:
                         self.update_segment_record()
@@ -355,14 +375,22 @@ class FRAICAPManager:
                 else:
                     if self.flags.vehicle_moving.is_set():
                         if self.state == States.WAITING_SPEED:
+                            self.logger.info("Vehículo en movimiento. Inicia/reinicia captura")
                             self.start_capture()
                             self.state = States.CAPTURING
                     else:
                         if self.state == States.CAPTURING:
+                            self.logger.info("Vehículo detenido. Captura en pausa hasta que vehiculo comience a moverse")
                             self.end_capture()
                             self.state = States.WAITING_SPEED
                 time.sleep(0.001)
             except KeyboardInterrupt:
                 self.flags.quit.set()
 
+        self.logger.info("Terminando interfaces a agentes")
+        for agt in self.agents.items():
+            if agt.enabled:
+                agt.quit()
+        self.logger.info("Enviando mensaje de término a los agentes")
         self.end_agents()
+        self.logger.info("Aplicación terminada. Que tengas un buen día =)\n\n\n\n\n")

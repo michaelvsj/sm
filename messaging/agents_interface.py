@@ -1,6 +1,6 @@
 import socket
 import time
-from threading import Thread
+from threading import Thread, Event
 import logging
 from queue import SimpleQueue
 from messaging.messaging import Message
@@ -8,8 +8,9 @@ from agents.constants import HWStates, AgentStatus
 
 
 class AgentInterface:
-    def __init__(self, name, ip_addr='', ip_port=0):
+    def __init__(self, name, quit_flag: Event, ip_addr='', ip_port=0):
         self.name = name
+        self.__flaq_quit = quit_flag
         self.__ip_adress = ip_addr
         self.__ip_port = ip_port
         self.__connection = None
@@ -30,43 +31,44 @@ class AgentInterface:
         if not self.__ip_port or not self.__ip_adress:
             self.logger.error(f"Primero se debe setear la direccion y puerto IP del agente {self.name}")
             return
-        Thread(target=self.__connect_insist, name=f"AgentInterface({self.name}).__connect_insist").start()
+        Thread(target=self.__connect_insist, name=f"AgentInterface({self.name}).__connect_insist", daemon=True).start()
         Thread(target=self.__receive, name=f"AgentInterface({self.name}).__receive", daemon=True).start()
         Thread(target=self.__check_state, name=f"AgentInterface({self.name}).__check_state", daemon=True).start()
 
     def __check_state(self):
-        while True:
+        while not self.__flaq_quit.is_set():
             if self.__connected:
                 self.send_msg(Message.cmd_query_agent_state())
-                time.sleep(1)
-                self.send_msg(Message.cmd_query_hw_state())
-                time.sleep(1)
+                if not self.__flaq_quit.wait(1):
+                    self.send_msg(Message.cmd_query_hw_state())
+                    self.__flaq_quit.wait(1)
 
     def __connect_insist(self):
         error = False
-        while not self.__connected:
+        while not self.__connected and not self.__flaq_quit.is_set():
             try:
                 self.__sock.connect((self.__ip_adress, self.__ip_port))
                 self.__connected = True
             except ConnectionRefusedError:
                 if not error:
                     error = True
-                    self.logger.warning(f"Conexión rechazada a {self.__ip_adress}:{self.__ip_port}. Reintentando.")
-                time.sleep(1)
+                    self.logger.warning(f"Conexión rechazada a agente {self.name}. {self.__ip_adress}:{self.__ip_port}. Reintentando.")
+                self.__flaq_quit.wait(1)
             except Exception:
                 if not error:
                     error = True
                 self.logger.exception(f"Fallo de conexión a {self.__ip_adress}:{self.__ip_port}. Reintentando")
-                time.sleep(1)
+                self.__flaq_quit.wait(1)
 
     def __receive(self):
         cmd = b''
-        while True:
+        while not self.__flaq_quit.is_set():
             if self.__connected:
                 try:
                     bt = self.__sock.recv(1)
                     if not bt:
-                        self.logger.warning(f"Conexión cerrada por manager")
+                        self.logger.warning(f"Conexión cerrada por agente {self.name}. Reintenta conexión.")
+                        self.__flaq_quit.wait(0.1)
                         self.__connect_insist()  # Intenta reconexión
                     elif bt == Message.EOT:
                         msg = Message.deserialize(cmd)
@@ -114,3 +116,6 @@ class AgentInterface:
                 self.logger.error(f"Agente desconectado")
         else:
             return False
+
+    def quit(self):
+        self.__flaq_quit.set()
