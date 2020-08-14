@@ -12,7 +12,7 @@ capture:
   splitting_distance: 50 #metros
   splitting_time: 30 #segundos. Tiempo máximo antes de subdividir una captura. Generalmente se gatilla cuando GPS falla (o si vehículo va muy lento)
   pause_speed: -0.5 #nudos (1 nudo = 1.852 km/hr). Bajo esta velocidad, se considera detenido y se pausa la captura.
-  resume_speed: 0.1 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
+  resume_speed: -3 #nudos (1 nudo = 1.852 km/hr). Al superar nuevamente esta velocidad, captura parte nuevamente (salvo que haya sido detenida manualmente)
 sqlite:
   db_file: /home/mich/temp/capture/fraicap.sqlite #/home/frai/sw/fraicap.sqlite
 

@@ -135,6 +135,7 @@ class FRAICAPManager:
 
         :return:
         """
+        self.sys_id = self.dbi.get_system_id()
         self.state = States.STARTING
         if os.name == 'posix':
             python_exec = os.path.join(sys.exec_prefix, 'bin', 'python')
@@ -283,7 +284,7 @@ class FRAICAPManager:
         self.segment_coords_ini = self.coordinates
         self.segment_current_length = 0
         self.segment_current_init_time = time.time()
-        self.folio = get_new_folio()
+        self.folio = get_new_folio(self.sys_id)
         self.segment += 1
         self.capture_dir = self.get_new_capture_folder()
         self.logger.info(f"Nuevo segmento: {self.session}/{self.segment:04d}")
@@ -315,8 +316,8 @@ class FRAICAPManager:
                               lat_fin=lat_fin)
 
     def get_new_capture_folder(self):
-        str_seg = f"{self.segment:04d}"
-        folder = os.path.join(os.path.join(os.path.join(self.capture_dir_base, get_date_str()), self.session), str_seg)
+        rel_dir = self.sys_id + os.sep + get_date_str() + os.sep + self.session + os.sep + f"{self.segment:04d}"
+        folder = os.path.join(self.capture_dir_base, rel_dir)
         os.makedirs(folder, exist_ok=True)
         return folder
 
@@ -380,7 +381,7 @@ class FRAICAPManager:
                             self.state = States.CAPTURING
                     else:
                         if self.state == States.CAPTURING:
-                            self.logger.info("Vehículo detenido. Captura en pausa hasta que vehiculo comience a moverse")
+                            self.logger.info("Vehículo detenido. Captura en pausa hasta que comience a moverse")
                             self.end_capture()
                             self.state = States.WAITING_SPEED
                 time.sleep(0.001)

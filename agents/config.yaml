@@ -87,7 +87,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/os1_lidar.log
+        filename: ../logs/os1_lidar.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -96,7 +96,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/os1_imu.log
+        filename: ../logs/os1_imu.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -105,7 +105,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/gps.log
+        filename: ../logs/gps.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -114,7 +114,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/camera.log
+        filename: ../logs/camera.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -123,7 +123,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/imu.log
+        filename: ../logs/imu.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -132,7 +132,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/imu.log
+        filename: ../logs/imu.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -141,7 +141,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/data_copy.log
+        filename: ../logs/data_copy.log
         when: midnight
         interval: 1
         backupCount: 7
@@ -150,7 +150,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: logs/inet.log
+        filename: ../logs/inet.log
         when: midnight
         interval: 1
         backupCount: 7

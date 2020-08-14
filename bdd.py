@@ -18,7 +18,7 @@ class DBInterface:
         sql = f"INSERT INTO {DB_TABLE} " \
               f"(num_folio, timestamp, estado, dir, duracion, distancia, lon_ini, lat_ini, lon_fin, lat_fin) " \
               f" VALUES " \
-              f"('{folio}', {timestamp}, '{EstatusDelTramo.CAP_OK}', '{carpeta}', {duracion}, {distancia}, " \
+              f"('{folio}', {timestamp}, '{EstatusDelTramo.CAP_OK.value}', '{carpeta}', {duracion}, {distancia}, " \
               f"{lon_ini}, {lat_ini}, {lon_fin}, {lat_fin})"
         try:
             with sqlite3.connect(self.db) as conn:
@@ -28,6 +28,18 @@ class DBInterface:
         except Exception:
             self.logger.exception(
                 f"Error al crear nuevo registro de tramo en base de datos. Query: {sql}")
+            return False
+
+    def get_system_id(self):
+        sql = f"SELECT sys_id from local"
+        try:
+            with sqlite3.connect(self.db) as conn:
+                cur = conn.execute(sql)
+                record = cur.fetchone()
+            return record[0]
+        except Exception as e:
+            self.logger.exception(
+                f"Error al obtener registros desde base de datos. Query: {sql}. Error: {str(e)}")
             return False
 
     def get_copy_pending(self):

@@ -170,8 +170,12 @@ class AbstractHWAgent(ABC):
             self.connection.sendall(msg)
         except BrokenPipeError:
             pass
-        except OSError:
-            self.logger.exception("")
+        except OSError as e:
+            if e.errno == errno.EBADF:
+                if not self.flag_quit.is_set():
+                    self.logger.warning(f"No se pudo enviar mensje {msg} al manager. Se perdió la conexión.")
+            else:
+                self.logger.exception("")
 
     def _send_data_to_mgr(self, data):
         msg = Message(_type=Message.DATA, arg=data).serialize()
