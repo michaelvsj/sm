@@ -80,11 +80,12 @@ class InetAgent(AbstractHWAgent):
         pass
 
     def _agent_connect_hw(self):
-        # No aplica. Conectividad será chequeada en bucle principal
+        # TODO hacer un "sudo ifup"
         return True
 
-    def _agent_reset_hw_connection(self):
-        self._agent_connect_hw()
+    def _agent_disconnect_hw(self):
+        # TODO hacer un "sudo ifdown"
+        pass
 
     def _pre_capture_file_update(self):
         pass
@@ -94,9 +95,9 @@ class InetAgent(AbstractHWAgent):
             if check_ping(self.ping_ip_1) or check_ping(self.ping_ip_2):
                 self.hw_state = HWStates.NOMINAL
             elif self.__check_iface_inet():
-                self.hw_state = HWStates.WARNING
-            else:
                 self.hw_state = HWStates.ERROR
+            else:
+                self.hw_state = HWStates.NOT_CONNECTED
             time.sleep(5)
 
     def __check_iface_inet(self):

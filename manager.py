@@ -6,7 +6,7 @@ import sys
 import time
 from enum import Enum, auto
 from queue import SimpleQueue
-from subprocess import Popen
+from subprocess import Popen, DEVNULL, STDOUT
 from threading import Thread, Event
 
 import yaml
@@ -34,7 +34,7 @@ class Flags:
         self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
         self.new_command = Event()  # El usuario presionó el boton de inicio/fin de captura o una tecla en consola. Como sea, hay un nuevo comando en la cola de comandos
         self.quit = Event() # Para indicar el fin de la aplicación
-        self.agents_ready = Event()
+        self.critical_agents_ready = Event()
 
 
 class States(Enum):
@@ -151,7 +151,7 @@ class FRAICAPManager:
         self.logger.info(f"Manager ejecutandose con PID {os.getpid()}")
         for agt in self.agents.items():
             if agt.enabled:
-                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"]).pid
+                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"], stdin=DEVNULL, stdout=DEVNULL, stderr=STDOUT).pid
                 self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
         time.sleep(0.5)  # Les da tiempo para partir antes de intentar conexión
         for agt in self.agents.items():
@@ -172,12 +172,11 @@ class FRAICAPManager:
         Thread(target=self.check_hw, name="check_hw", daemon=True).start()
 
         self.logger.info("Iniciando thread de reporte de estado de agentes")
-        Thread(target=self.check_agents_ready, name="check_agents_ready", daemon=True).start()
+        Thread(target=self.check_critical_agents_ready, name="check_agents_ready", daemon=True).start()
 
-        self.logger.info("Esperando que agentes estén listos para capturar")
-        while not self.flags.agents_ready.is_set():
-            time.sleep(0.1)
-        self.logger.info("Agentes listos")
+        self.logger.info("Esperando que agentes críticos esten listos para capturar")
+        self.flags.critical_agents_ready.wait()
+        self.logger.info("Agentes críticos están listos")
 
         self.logger.info("Iniciando threads generadores de eventos")
         self.logger.info("--Iniciando thread de lectura de teclado")
@@ -191,21 +190,32 @@ class FRAICAPManager:
         Thread(target=self.check_spacetime, name="check_spacetime", daemon=True).start()
 
     def check_hw(self):
+        # Primero espera 25 segundos que es un poco más que lo que el lidar debiera tardarse en partir
+        # Así no da una falsa alarma al usuario
+        self.flags.quit.wait(25)
+        agents = [self.agents.OS1_LIDAR, self.agents.IMU, self.agents.CAMERA, self.agents.GPS, self.agents.INET]
+        devices = [Devices.OS1, Devices.IMU, Devices.CAMERA, Devices.GPS, Devices.ROUTER]
         while not self.flags.quit.is_set():
-            self.flags.quit.wait(10)
-            if self.agents.OS1_LIDAR.enabled:
-                self.agents.ATMEGA.send_data({"device": Devices.OS1, "status": self.agents.OS1_LIDAR.hw_status})
-            if self.agents.IMU.enabled:
-                self.agents.ATMEGA.send_data({"device": Devices.IMU, "status": self.agents.IMU.hw_status})
-            if self.agents.CAMERA.enabled:
-                self.agents.ATMEGA.send_data({"device": Devices.CAMERA, "status": self.agents.CAMERA.hw_status})
-            if self.agents.GPS.enabled:
-                self.agents.ATMEGA.send_data({"device": Devices.GPS, "status": self.agents.GPS.hw_status})
-            if self.agents.INET.enabled:
-                self.agents.ATMEGA.send_data({"device": Devices.ROUTER, "status": self.agents.INET.hw_status})
+            offline = False
+            error = False
+            for a, d in zip(agents, devices):
+                if a.enabled:
+                    self.agents.ATMEGA.send_data({"device": d, "status": a.hw_status})
+                    if a.hw_status == HWStates.NOT_CONNECTED:
+                        offline = True
+                    elif a.hw_status == HWStates.ERROR:
+                        error = True
+            if offline:
+                self.agents.ATMEGA.send_msg(Message.system_offline())
+            elif error:
+                self.agents.ATMEGA.send_msg(Message.system_error())
+            else:
+                self.agents.ATMEGA.send_msg(Message.system_online())
+
             for agt in self.agents.items():
-                if agt.enabled and agt.agent_status != AgentStatus.STARTING and agt.hw_status != HWStates.NOMINAL:
+                if agt.enabled and agt.hw_status != HWStates.NOMINAL:
                     self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
+            self.flags.quit.wait(5)
 
     def check_spacetime(self):
         while not self.flags.quit.is_set():
@@ -246,20 +256,20 @@ class FRAICAPManager:
                 self.q_user_commands.put(b)
             time.sleep(0.1)
 
-    def check_agents_ready(self):
+    def check_critical_agents_ready(self):
+        critical_agents = [self.agents.OS1_LIDAR, self.agents.ATMEGA]
         while not self.flags.quit.is_set():
             all_ready = True
-            for agt in self.agents.items():
+            for agt in critical_agents:
                 if agt.enabled:
                     if agt.agent_status != AgentStatus.STAND_BY and agt.agent_status != AgentStatus.CAPTURING:
                         all_ready = False
+                        self.flags.critical_agents_ready.clear()
                         self.logger.debug(f"Agente de {agt.name} reporta estado {agt.agent_status}")
-                        time.sleep(1)
+                        self.flags.quit.wait(1)
             if all_ready:
-                self.flags.agents_ready.set()
-            else:
-                self.flags.agents_ready.clear()
-            self.flags.quit.wait(0.2)
+                self.flags.critical_agents_ready.set()
+            self.flags.quit.wait(0.1)
 
     def get_keyboard_input(self):
         while not self.flags.quit.is_set():

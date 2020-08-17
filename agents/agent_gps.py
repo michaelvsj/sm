@@ -79,9 +79,8 @@ class GPSAgent(AbstractHWAgent):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         self.ser.close()
-        self._agent_connect_hw()
 
     def __receive_and_pipe_data(self):
         while not self.flag_quit.is_set():
@@ -137,7 +136,7 @@ class GPSAgent(AbstractHWAgent):
                 bytes_in = self.ser.readline()
             except (serial.SerialException, serial.SerialTimeoutException):
                 self.logger.exception(f"Error al leer del GPS. Reseteando conexión")
-                self._agent_reset_hw_connection()
+                self._agent_disconnect_hw()
                 continue
             if len(bytes_in):
                 try:

@@ -45,6 +45,7 @@ class AgentInterface:
 
     def __connect_insist(self):
         error = False
+        self.__connected = False
         while not self.__connected and not self.__flaq_quit.is_set():
             try:
                 self.__sock.connect((self.__ip_adress, self.__ip_port))

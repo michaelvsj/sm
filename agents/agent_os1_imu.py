@@ -71,9 +71,11 @@ class OS1IMUAgent(AbstractHWAgent):
             return False
         return True
 
-    def _agent_reset_hw_connection(self):
-        self.sock.close()
-        self._agent_connect_hw()
+    def _agent_disconnect_hw(self):
+        try:
+            self.sock.close()
+        except:
+            pass
 
     def __read_from_imu(self):
         while not self.flag_quit.is_set():

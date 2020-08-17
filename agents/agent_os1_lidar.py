@@ -106,9 +106,11 @@ class OS1LiDARAgent(AbstractHWAgent):
         time.sleep(20)  # TODO: consultar estado hasta que sea "running"
         return True
 
-    def _agent_reset_hw_connection(self):
-        self.sock.close()
-        self._agent_connect_hw()
+    def _agent_disconnect_hw(self):
+        try:
+            self.sock.close()
+        except:
+            pass
 
     def __read_from_lidar(self):
         os_buffer_size = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)

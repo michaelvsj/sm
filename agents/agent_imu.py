@@ -72,9 +72,8 @@ class IMUAgent(AbstractHWAgent):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         self.yost_api.disconnect()
-        self._agent_connect_hw()
 
     def __receive_and_pipe_data(self):
         self.logger.info("Enviando comando a IMU para que inicie streaming de datos")

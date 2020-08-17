@@ -40,6 +40,13 @@ agent_imu:
   sample_rate: 200 #Hz
   usb_id: 2476:1010
   com_port: /dev/ttyACM2
+agent_atmega:
+  manager_port: 0
+  local_port: 30006
+  output_file_name:
+  hw_connection_retries: 5
+  com_port: /dev/ttyARD0
+  baudrate: 115200
   buttons:
     bNoButton: 0, 4.99
     bSingleButton: 0, 0
@@ -53,13 +60,6 @@ agent_imu:
     bHangup: 2.23, 3.83
     bStop: 1.98, 3.83
     bM: 1.72, 3.83
-agent_atmega:
-  manager_port: 0
-  local_port: 30006
-  output_file_name:
-  hw_connection_retries: 5
-  com_port: /dev/ttyARD0
-  baudrate: 115200
 agent_inet:
   manager_port: 0
   local_port: 30007
@@ -132,7 +132,7 @@ logging:
         class: logging.handlers.TimedRotatingFileHandler
         level: DEBUG
         formatter: simple
-        filename: ../logs/imu.log
+        filename: ../logs/atmega.log
         when: midnight
         interval: 1
         backupCount: 7

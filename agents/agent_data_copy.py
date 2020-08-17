@@ -94,7 +94,7 @@ class DataCopy(AbstractHWAgent):
     def _agent_connect_hw(self):
         return True
 
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         pass
     
     def _pre_capture_file_update(self):

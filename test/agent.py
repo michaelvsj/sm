@@ -41,7 +41,7 @@ class TestAgent(AbstractHWAgent):
         time.sleep(2)
         return True
 
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         pass
 
 

@@ -103,13 +103,15 @@ class AtmegaAgent(AbstractHWAgent):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         self.ser.close()
-        self._agent_connect_hw()
 
     def __main_loop(self):
         self.state = AgentStatus.STAND_BY
-        self.__turn_off_leds_now()
+        self.__switch_leds_now(False)
+        self.__switch_leds_now(True)
+        self.flag_quit.wait(5)
+        self.__switch_leds_now(False)
         while not self.flag_quit.is_set():
             try:
                 # Busca encabezado
@@ -128,7 +130,7 @@ class AtmegaAgent(AbstractHWAgent):
             except Exception as e:
                 self.logger.exception("")
                 self.flag_quit.set()
-        self.__turn_off_leds_now()
+        self.__switch_leds_now(False)
 
     def __ping_button_feedback(self):
         """
@@ -211,7 +213,7 @@ class AtmegaAgent(AbstractHWAgent):
         elif msg.typ == Message.DATA:
             if isinstance(msg.arg, dict):
                 device = msg.arg["device"]
-                status = msg.arg["state"]
+                status = msg.arg["status"]
                 if status == HWStates.NOT_CONNECTED:  # Si no está conectado
                     self.ser.write(START_OF_TEXT + self.devices_leds[device] + ON)  # Enciende LED
                 elif status == HWStates.ERROR:  # Si está conectado, pero con error
@@ -220,14 +222,15 @@ class AtmegaAgent(AbstractHWAgent):
                 else:  # Si está conectado y sin error
                     self.ser.write(START_OF_TEXT + self.devices_leds[device] + OFF)  # Apaga el LED
 
-    def __turn_off_leds_now(self):
-        self.ser.write(START_OF_TEXT + LED_ONLINE + OFF)
-        self.ser.write(START_OF_TEXT + LED_OFFLINE + OFF)
-        self.ser.write(START_OF_TEXT + LED_CAPTURING + OFF)
-        self.ser.write(START_OF_TEXT + LED_BUT_FDBK + OFF)
-        self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + OFF)
+    def __switch_leds_now(self, state: bool):
+        s_state = ON if state else OFF
+        self.ser.write(START_OF_TEXT + LED_ONLINE + s_state)
+        self.ser.write(START_OF_TEXT + LED_OFFLINE + s_state)
+        self.ser.write(START_OF_TEXT + LED_CAPTURING + s_state)
+        self.ser.write(START_OF_TEXT + LED_BUT_FDBK + s_state)
+        self.ser.write(START_OF_TEXT + LED_EXT_DRIVE + s_state)
         for led in self.devices_leds.values():
-            self.ser.write(START_OF_TEXT + led + OFF)
+            self.ser.write(START_OF_TEXT + led + s_state)
 
     def _agent_start_capture(self):
         pass

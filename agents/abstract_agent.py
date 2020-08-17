@@ -217,14 +217,18 @@ class AbstractHWAgent(ABC):
                         self.__update_capture_file(msg.arg)
                     else:  # Todos los demás mensajes deben ser procesados por el agente particular
                         self._agent_process_manager_message(msg)
+                #TODO: revisar si acaso es mejor que sea el manager el que reinicie los agentes
+                #La ventaja es que el manager puede detener la captura e impedir nuevas capturas hasta que los agentes
+                # vuelvan a estar conectados
                 if self.hw_state == HWStates.NOT_CONNECTED or self.hw_state == HWStates.ERROR:
-                    if self.state == AgentStatus.CAPTURING:
-                        self.state = AgentStatus.STARTING
-                        self._agent_reset_hw_connection()
-                        self.state = AgentStatus.CAPTURING
-                    elif self.state == AgentStatus.STAND_BY:
-                        self.state = AgentStatus.STARTING
-                        self._agent_reset_hw_connection()
+                    self.logger.error(f"Hardware en estado {self.hw_state}. Se intentará reconexion.")
+                    self._agent_disconnect_hw()
+                    self.state = AgentStatus.STARTING
+                    if self.__hw_connect_insist():
+                        self.state = AgentStatus.STAND_BY
+                    else:
+                        self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. \nFIN\n")
+                        sys.exit(1)
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
         except Exception:
@@ -288,5 +292,5 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def _agent_reset_hw_connection(self):
+    def _agent_disconnect_hw(self):
         pass

@@ -70,8 +70,8 @@ class CameraAgent(AbstractHWAgent):
         self.hw_state = HWStates.NOMINAL
         return True
 
-    def _agent_reset_hw_connection(self):
-        self._agent_connect_hw()
+    def _agent_disconnect_hw(self):
+        pass
 
     def _pre_capture_file_update(self):
         pass
