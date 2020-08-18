@@ -69,14 +69,12 @@ class AbstractHWAgent(ABC):
             sys.exit(0)
 
     def __hw_connect_insist(self):
-        attempts = 0
-        while attempts < self.hw_connections_retries and not self.flags.quit.is_set():
+        while not self.flags.quit.is_set():
             if self._agent_connect_hw():
                 self.hw_state = HWStates.NOMINAL
                 return True
             else:
-                self.flags.quit.wait(1)
-                attempts += 1
+                self.flags.quit.wait(0.5)
         return False
 
     def __configure(self):
@@ -86,7 +84,6 @@ class AbstractHWAgent(ABC):
         self.config = full_config[self.config_section]
         self.manager_tcp_port = self.config["manager_port"]
         self.local_tcp_port = self.config["local_port"]
-        self.hw_connections_retries = self.config["hw_connection_retries"]
         try:
             self.output_file_name = self.config["output_file_name"]
         except KeyError:
@@ -219,12 +216,9 @@ class AbstractHWAgent(ABC):
             self.logger.info("Iniciando thread de comunicación con manager")
             mgr_comm.start()
 
+            self.logger.info("Conectado al hardware")
             if self.__hw_connect_insist():
                 self.state = AgentStatus.STAND_BY
-            else:
-                self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
-                                  f"Terminando proceso")
-                sys.exit(1)
 
             self.logger.info("Iniciando thread de escritura a disco")
             if self.output_file_name:
@@ -249,12 +243,11 @@ class AbstractHWAgent(ABC):
                     self.state = AgentStatus.STARTING
                     self.logger.info(f"Cambiando estado a {self.state}")
                     self._agent_disconnect_hw()
+                    self.logger.info("Reconectando al hardware")
                     if self.__hw_connect_insist():
                         self.state = AgentStatus.STAND_BY
                         self.logger.info(f"Cambiando estado a {self.state}")
-                    else:
-                        self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. \nFIN\n")
-                        break
+
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
         except Exception:

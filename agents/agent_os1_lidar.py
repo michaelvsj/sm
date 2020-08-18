@@ -54,6 +54,7 @@ class OS1LiDARAgent(AbstractHWAgent):
         """
         self.sensor_ip = self.config["sensor_ip"]
         self.host_ip = self.config["host_ip"]
+        self.os1 = OS1(self.sensor_ip, self.host_ip, mode="512x10")
 
     def _agent_run_data_threads(self):
         """
@@ -79,16 +80,16 @@ class OS1LiDARAgent(AbstractHWAgent):
     def _agent_connect_hw(self):
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(20)
         try:
             self.sock.bind((self.host_ip, LIDAR_UDP_PORT))
         except OSError as e:
             if e.errno == errno.EADDRINUSE:
-                self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{self.local_tcp_port}")
+                self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{LIDAR_UDP_PORT}")
             else:
                 self.logger.exception("")
             return False
 
-        self.os1 = OS1(self.sensor_ip, self.host_ip, mode="512x10")
         self.logger.info("Cargando parmámetros desde LiDAR ('beam intrinsics')")
         try:
             beam_intrinsics = json.loads(self.os1.get_beam_intrinsics())
@@ -97,6 +98,9 @@ class OS1LiDARAgent(AbstractHWAgent):
                 self.logger.error(f"No se puede acceder a la IP del LiDAR: 'No route to host'")
             else:
                 self.logger.exception(f"Error al intentar obtener beam_intrinsics. Posible desconexion")
+            return False
+        except json.decoder.JSONDecodeError:
+            self.logger.error(f"Error al intentar obtener beam_intrinsics. Posible desconexion")
             return False
         beam_alt_angles = beam_intrinsics['beam_altitude_angles']
         beam_az_angles = beam_intrinsics['beam_azimuth_angles']
@@ -111,43 +115,56 @@ class OS1LiDARAgent(AbstractHWAgent):
     def _agent_disconnect_hw(self):
         try:
             self.sock.close()
+            self.sock = None
         except:
             pass
 
     def __read_from_lidar(self):
+        self.logger.debug("Iniciando __read_from_lidar")
         os_buffer_size = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
 
         # Al iniciar, se salta el primer lote de paquetes que son los que están en el buffer y son "viejos"
         bytes_recvd = 0
         while bytes_recvd < os_buffer_size:
-            pkt = self.sock.recv(PACKET_SIZE)
-            bytes_recvd += len(pkt)
+            try:
+                pkt = self.sock.recv(PACKET_SIZE)
+                bytes_recvd += len(pkt)
+            except:
+                self.logger.exception("")
 
+
+        self.logger.debug("Inicia bucle principal de __read_from_lidar")
         while not self.flags.quit.is_set():
-            packet, address = self.sock.recvfrom(PACKET_SIZE)
-            if not self.state == AgentStatus.CAPTURING:
-                continue
-            if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
-                first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")
-                # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
-                if ADMIT_MEAS_ID_MORE_THAN <= first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
-                    # parsea y pone el paquete parseado en un buffer para su posterior escritura a disco
-                    packed, blocks = xyz_points_pack(unpack_lidar(packet), self.active_channels)
-                    self.dq_formatted_data.append(packed)
+            try:
+                packet, address = self.sock.recvfrom(PACKET_SIZE)
+                if not self.state == AgentStatus.CAPTURING:
+                    continue
+                if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
+                    first_measurement_id = int.from_bytes(packet[8:10], byteorder="little")
+                    # Si los datos corresponden al azimuth donde está el conector, preocesa los paquetes
+                    if ADMIT_MEAS_ID_MORE_THAN <= first_measurement_id <= ADMIT_MEAS_ID_LESS_THAN:
+                        # parsea y pone el paquete parseado en un buffer para su posterior escritura a disco
+                        packed, blocks = xyz_points_pack(unpack_lidar(packet), self.active_channels)
+                        self.dq_formatted_data.append(packed)
 
-                    # Recopilación de datos para estadística de paquetes
-                    frame_id = int.from_bytes(packet[10:12], byteorder="little")
-                    try:
-                        self.packets_per_frame[frame_id] += 1
-                    except KeyError:
-                        self.packets_per_frame[frame_id] = 1
-                    self.blocks_valid += blocks[0]
-                    self.blocks_invalid += blocks[1]
+                        # Recopilación de datos para estadística de paquetes
+                        frame_id = int.from_bytes(packet[10:12], byteorder="little")
+                        try:
+                            self.packets_per_frame[frame_id] += 1
+                        except KeyError:
+                            self.packets_per_frame[frame_id] = 1
+                        self.blocks_valid += blocks[0]
+                        self.blocks_invalid += blocks[1]
+            except:
+                self.logger.exception("")
 
     def _agent_check_hw_connected(self):
         return check_ping(self.sensor_ip)
 
     def _pre_capture_file_update(self):
+        if self.state != AgentStatus.CAPTURING:
+            return
+
         frames = np.array(list(self.packets_per_frame.keys()))
         num_packets = np.array(list(self.packets_per_frame.values()))
         self.packets_per_frame = dict()  # resetea datos

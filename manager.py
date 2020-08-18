@@ -12,7 +12,7 @@ import yaml
 
 from agents.constants import HWStates, Devices
 from bdd import DBInterface
-from messaging.agents_interface import AgentInterface
+from agents_interface import AgentInterface
 from messaging.messaging import Message, AgentStatus
 from utils import get_time_str, get_date_str, Coords, get_new_folio
 
@@ -213,8 +213,12 @@ class FRAICAPManager:
                 self.agents.ATMEGA.send_msg(Message.sys_online())
 
             for agt in self.agents.items():
-                if agt.enabled and agt.hw_status != HWStates.NOMINAL:
-                    self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
+                if agt.enabled:
+                    if agt.is_connected and agt.hw_status != HWStates.NOMINAL:
+                        self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
+                    elif not agt.is_connected():
+                        self.logger.warning(f"Agente {agt.name} desconectado de manager")
+
             self.flags.quit.wait(5)
 
     def check_spacetime(self):
@@ -386,7 +390,7 @@ class FRAICAPManager:
                     elif cmd == FORCE_START:
                         if self.state == States.STAND_BY:
                             self.logger.info(
-                                "Sesión de captura forzada (sin esperar velocidad) iniciada por usuario por el usuario.")
+                                "Sesión de captura forzada (sin esperar velocidad) iniciada por el usuario.")
                             self.flags.vehicle_moving.set()
                             self.new_session()
                             self.start_capture()

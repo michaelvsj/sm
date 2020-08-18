@@ -68,9 +68,8 @@ class AgentInterface:
                 try:
                     bt = self.__sock.recv(1)
                     if not bt:
-                        #self.logger.warning(f"Conexión cerrada por agente {self.name}. Reintenta conexión.")
                         self.__flaq_quit.wait(0.1)
-                        #self.__connect_insist()  # Intenta reconexión
+                        raise ConnectionResetError
                     elif bt == Message.EOT:
                         msg = Message.deserialize(cmd)
                         if msg.typ == Message.AGENT_STATE:

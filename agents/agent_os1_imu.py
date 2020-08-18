@@ -62,11 +62,12 @@ class OS1IMUAgent(AbstractHWAgent):
     def _agent_connect_hw(self):
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(20)
         try:
             self.sock.bind((self.host_ip, IMU_UDP_PORT))
         except OSError as e:
             if e.errno == errno.EADDRINUSE:
-                self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{self.local_tcp_port}")
+                self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{IMU_UDP_PORT}")
             else:
                 self.logger.exception("")
             return False
@@ -75,20 +76,23 @@ class OS1IMUAgent(AbstractHWAgent):
     def _agent_disconnect_hw(self):
         try:
             self.sock.close()
+            self.sock = None
         except:
             pass
 
     def __read_from_imu(self):
         while not self.flags.quit.is_set():
-            packet, address = self.sock.recvfrom(PACKET_SIZE)
-            if not self.state == AgentStatus.CAPTURING:
-                continue
-            if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
-                ti, ta, tg, ax, ay, az, gx, gy, gz = unpack_imu(packet)
-                f_data = f"{time.time():.3f};{int(ta / 1000)};{int(tg / 1000)};" \
-                         f"{ax:.3f};{ay:.3f};{az:.3f};{gx:.3f};{gy:.3f};{gz:.3f}"
-                self.dq_formatted_data.append(f_data)
-
+            try:
+                packet, address = self.sock.recvfrom(PACKET_SIZE)
+                if not self.state == AgentStatus.CAPTURING:
+                    continue
+                if address[0] == self.sensor_ip and len(packet) == PACKET_SIZE:
+                    ti, ta, tg, ax, ay, az, gx, gy, gz = unpack_imu(packet)
+                    f_data = f"{time.time():.3f};{int(ta / 1000)};{int(tg / 1000)};" \
+                             f"{ax:.3f};{ay:.3f};{az:.3f};{gx:.3f};{gy:.3f};{gz:.3f}"
+                    self.dq_formatted_data.append(f_data)
+            except:
+                pass
     def _pre_capture_file_update(self):
         pass
 
