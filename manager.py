@@ -1,7 +1,6 @@
 import logging
 import logging.config
 import os
-import signal
 import sys
 import time
 from enum import Enum, auto
@@ -23,6 +22,7 @@ KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
 KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
 FORCE_START = 'f'  # inicia captura inmediatamente, sin esperar que vehículo inice movimiento
 
+
 class Flags:
     """
     Contiene los eventos relevantes para controlar el flujo de captura
@@ -33,7 +33,7 @@ class Flags:
         self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
         self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
         self.new_command = Event()  # El usuario presionó el boton de inicio/fin de captura o una tecla en consola. Como sea, hay un nuevo comando en la cola de comandos
-        self.quit = Event() # Para indicar el fin de la aplicación
+        self.quit = Event()  # Para indicar el fin de la aplicación
         self.critical_agents_ready = Event()
 
 
@@ -139,7 +139,7 @@ class FRAICAPManager:
         self.sys_id = self.dbi.get_system_id()
         if not self.sys_id:
             self.logger.warning(f"No fue posible obtener 'sys_id' de la base de datos. Usando valor '{self.sys_id}'.")
-        self.state = States.STARTING
+        self.change_state(States.STARTING)
         if os.name == 'posix':
             python_exec = os.path.join(sys.exec_prefix, 'bin', 'python')
         elif os.name == 'nt':
@@ -206,11 +206,11 @@ class FRAICAPManager:
                     elif a.hw_status == HWStates.ERROR:
                         error = True
             if offline:
-                self.agents.ATMEGA.send_msg(Message.system_offline())
+                self.agents.ATMEGA.send_msg(Message.sys_offline())
             elif error:
-                self.agents.ATMEGA.send_msg(Message.system_error())
+                self.agents.ATMEGA.send_msg(Message.sys_error())
             else:
-                self.agents.ATMEGA.send_msg(Message.system_online())
+                self.agents.ATMEGA.send_msg(Message.sys_online())
 
             for agt in self.agents.items():
                 if agt.enabled and agt.hw_status != HWStates.NOMINAL:
@@ -235,18 +235,20 @@ class FRAICAPManager:
                 dist = float(gps_datapoint['distance_delta'])
                 speed = float(gps_datapoint['spd_over_grnd'])
                 self.segment_current_length += dist
-                # self.logger.debug(f"GPS: Dist: {dist}, Spd:{speed}, Lon: {self.coordinates.lon:.5f}, Lat:{self.coordinates.lat:.5f}")
 
                 # Pausa por detención
                 if speed < self.mgr_cfg['capture']['pause_speed']:
+                    self.logger.debug(f"GPS speed:{speed}")
                     self.flags.vehicle_moving.clear()
 
                 # Reactivación post-detención
                 if speed > self.mgr_cfg['capture']['resume_speed']:
+                    self.logger.debug(f"GPS speed:{speed}")
                     self.flags.vehicle_moving.set()
 
                 # División de captura en tramos, por distancia
                 if self.segment_current_length > self.mgr_cfg['capture']['splitting_distance']:
+                    self.logger.debug(f"GPS Dist. acum.: {self.segment_current_length}")
                     self.flags.segment_ended.set()
 
     def get_buttons(self):
@@ -342,6 +344,15 @@ class FRAICAPManager:
         self.segment = 0
         self.logger.info(f"Nueva sesión de captura: {self.session}")
 
+    def change_state(self, state):
+        self.state = state
+        if state == States.CAPTURING:
+            self.agents.ATMEGA.send_msg(Message.capture_on())
+        elif state == States.WAITING_SPEED:
+            self.agents.ATMEGA.send_msg(Message.capture_paused())
+        else:
+            self.agents.ATMEGA.send_msg(Message.capture_off())
+
     def run(self):
         try:
             self.initialize()
@@ -353,7 +364,7 @@ class FRAICAPManager:
 
         #  Aquí se implementa la lógica de alto nivel de la máquina de estados, basada en estados y eventos
         self.logger.info("Esperando eventos")
-        self.state = States.STAND_BY
+        self.change_state(States.STAND_BY)
         while not self.flags.quit.is_set():
             try:
                 if self.flags.new_command.is_set():
@@ -367,11 +378,11 @@ class FRAICAPManager:
                         if self.state == States.CAPTURING or self.state == States.WAITING_SPEED:
                             self.logger.info("Sesión de captura finalizada por usuario")
                             self.end_capture()
-                            self.state = States.STAND_BY
+                            self.change_state(States.STAND_BY)
                         elif self.state == States.STAND_BY:
                             self.logger.info("Sesión de captura iniciada por usuario. Esperando movimiento del vehículo")
                             self.new_session()
-                            self.state = States.WAITING_SPEED
+                            self.change_state(States.WAITING_SPEED)
                     elif cmd == FORCE_START:
                         if self.state == States.STAND_BY:
                             self.logger.info(
@@ -379,7 +390,7 @@ class FRAICAPManager:
                             self.flags.vehicle_moving.set()
                             self.new_session()
                             self.start_capture()
-                            self.state = States.CAPTURING
+                            self.change_state(States.CAPTURING)
                 elif self.flags.segment_ended.isSet():
                     if self.state == States.CAPTURING:
                         self.update_segment_record()
@@ -390,12 +401,12 @@ class FRAICAPManager:
                         if self.state == States.WAITING_SPEED:
                             self.logger.info("Vehículo en movimiento. Inicia/reinicia captura")
                             self.start_capture()
-                            self.state = States.CAPTURING
+                            self.change_state(States.CAPTURING)
                     else:
                         if self.state == States.CAPTURING:
                             self.logger.info("Vehículo detenido. Captura en pausa hasta que comience a moverse")
                             self.end_capture()
-                            self.state = States.WAITING_SPEED
+                            self.change_state(States.WAITING_SPEED)
                 time.sleep(0.001)
             except KeyboardInterrupt:
                 self.flags.quit.set()

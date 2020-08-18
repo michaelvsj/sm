@@ -241,6 +241,9 @@ class AtmegaAgent(AbstractHWAgent):
     def _pre_capture_file_update(self):
         pass
 
+    def _agent_check_hw_connected(self):
+        return True
+
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE

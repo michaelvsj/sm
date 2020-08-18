@@ -13,6 +13,7 @@ from pyproj import Geod
 import init_agent
 from constants import HWStates, AgentStatus
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from helpers import check_dev
 
 APP_FIELDS = ["sys_timestamp", "distance_delta"]
 RMC_FIELDS = ["latitude", "longitude", "timestamp", "spd_over_grnd", "true_course"]
@@ -195,6 +196,9 @@ class GPSAgent(AbstractHWAgent):
         except Exception:
             self.logger.exception("")
             return False
+
+    def _agent_check_hw_connected(self):
+        return check_dev(self.com_port)
 
     def _pre_capture_file_update(self):
         pass

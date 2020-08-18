@@ -88,27 +88,27 @@ class Message:
         return cls(cls.SET_FOLDER, _dir)
 
     @classmethod
-    def system_online(cls):
+    def sys_online(cls):
         return cls(cls.SYS_STATE, cls.SYS_ONLINE)
 
     @classmethod
-    def system_offline(cls):
+    def sys_offline(cls):
         return cls(cls.SYS_STATE, cls.SYS_OFFLINE)
 
     @classmethod
-    def system_error(cls):
+    def sys_error(cls):
         return cls(cls.SYS_STATE, cls.SYS_ERROR)
 
     @classmethod
-    def system_ext_drive_in_use(cls):
+    def sys_ext_drive_in_use(cls):
         return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_IN_USE)
 
     @classmethod
-    def system_ext_drive_not_in_use(cls):
+    def sys_ext_drive_not_in_use(cls):
         return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_NOT_IN_USE)
 
     @classmethod
-    def system_ext_drive_full(cls):
+    def sys_ext_drive_full(cls):
         return cls(cls.SYS_STATE, cls.SYS_EXT_DRIVE_FULL)
 
     @classmethod

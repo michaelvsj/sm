@@ -15,6 +15,7 @@ from os1.core import OS1
 from os1.lidar_packet import PACKET_SIZE, MAX_FRAME_ID, unpack as unpack_lidar
 from os1.utils import build_trig_table, xyz_points_pack
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from helpers import check_ping
 
 CONFIG_FILE = "config.yaml"
 LIDAR_UDP_PORT = 7502
@@ -143,12 +144,16 @@ class OS1LiDARAgent(AbstractHWAgent):
                     self.blocks_valid += blocks[0]
                     self.blocks_invalid += blocks[1]
 
+    def _agent_check_hw_connected(self):
+        return check_ping(self.sensor_ip)
+
     def _pre_capture_file_update(self):
         frames = np.array(list(self.packets_per_frame.keys()))
         num_packets = np.array(list(self.packets_per_frame.values()))
         self.packets_per_frame = dict()  # resetea datos
         if len(num_packets) == 0:
             self.logger.warning("No se recibieron paquetes desde el LiDAR")
+            self.hw_state = HWStates.ERROR
             return
 
         if frames[-1] < frames[0]:  # Ultimo frame recibido es menor que el primero => Ocurrió overflow del frame ID
@@ -176,7 +181,7 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_valid, self.blocks_invalid = 0, 0
 
         if lost_packets_pc > LOST_PACKETS_ERROR_THRESHOLD or blocks_invalid_pc > INVALID_BLOCKS_ERROR_THRESHOLD:
-            self.hw_state = HWStates.WARNING
+            self.hw_state = HWStates.ERROR
         else:
             self.hw_state = HWStates.NOMINAL
 

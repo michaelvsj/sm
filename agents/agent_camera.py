@@ -10,6 +10,7 @@ import subprocess
 import init_agent
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from constants import HWStates, AgentStatus
+from helpers import check_dev
 
 IMAGES_FOLDER = "img"
 
@@ -66,9 +67,12 @@ class CameraAgent(AbstractHWAgent):
         self.state = AgentStatus.STAND_BY
 
     def _agent_connect_hw(self):
-        # Todo: verificar que cámara esté conectada
-        self.hw_state = HWStates.NOMINAL
-        return True
+        if check_dev(self.dev_file):
+            self.hw_state = HWStates.NOMINAL
+            return True
+        else:
+            self.hw_state = HWStates.NOT_CONNECTED
+            return False
 
     def _agent_disconnect_hw(self):
         pass
@@ -99,6 +103,10 @@ class CameraAgent(AbstractHWAgent):
                 time.sleep(max(self.period - elapsed_time, 0))
             except Exception:
                 self.logger.exception("")
+
+    def _agent_check_hw_connected(self):
+        return check_dev(self.dev_file)
+
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE

@@ -13,17 +13,7 @@ import subprocess
 import init_agent
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
 from constants import HWStates, AgentStatus
-
-
-def check_ping(ip):
-    try:
-        if os.name == 'posix':
-            subprocess.run(["ping", "-c", "1", ip], capture_output=True, check=True)
-        elif os.name == 'nt':
-            subprocess.run(["ping", "-n", "1", ip], capture_output=True, check=True)
-        return True
-    except subprocess.CalledProcessError:
-        return False
+from helpers import check_ping, check_iface_inet
 
 
 class InetAgent(AbstractHWAgent):
@@ -90,22 +80,16 @@ class InetAgent(AbstractHWAgent):
     def _pre_capture_file_update(self):
         pass
 
+    def _agent_check_hw_connected(self):
+        return check_iface_inet(self.interface)
+
     def __check_connectivity(self):
         while not self.flags.quit.is_set():
             if check_ping(self.ping_ip_1) or check_ping(self.ping_ip_2):
                 self.hw_state = HWStates.NOMINAL
-            elif self.__check_iface_inet():
+            elif check_iface_inet(self.interface):
                 self.hw_state = HWStates.ERROR
-            else:
-                self.hw_state = HWStates.NOT_CONNECTED
-            time.sleep(5)
-
-    def __check_iface_inet(self):
-        if os.name == 'posix':
-            return "inet " in subprocess.getoutput(f"ifconfig {self.interface}")
-        elif os.name == 'nt':
-            self.logger.warning("Función no implementada para Windows. Se asume que existe conexión a router")
-            return True
+            self.flags.quit.wait(5)
 
 
 if __name__ == "__main__":

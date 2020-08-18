@@ -12,6 +12,7 @@ import serial
 import init_agent
 from constants import AgentStatus, HWStates
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from helpers import check_dev
 from yost3space.api import Yost3SpaceAPI, READ_TIMEOUT, BAUD_RATE, unpack
 
 HEADER = "system_time (s);accel_x (g);accel_y (g);accel_z (g);gyro_x (rad/s);gyro_y (rad/s);gyro_z (rad/s);q1;q2;q3;q4"
@@ -95,6 +96,9 @@ class IMUAgent(AbstractHWAgent):
             self.yost_api.stop_streaming()
         except:
             pass
+
+    def _agent_check_hw_connected(self):
+        return check_dev(self.com_port)
 
     def _pre_capture_file_update(self):
         pass

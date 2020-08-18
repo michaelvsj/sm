@@ -100,6 +100,9 @@ class DataCopy(AbstractHWAgent):
     def _pre_capture_file_update(self):
         pass
 
+    def _agent_check_hw_connected(self):
+        return True
+
     def __copy_data(self):
         while not self.database and not self.flags.quit.is_set():
             time.sleep(0.1)
@@ -109,7 +112,7 @@ class DataCopy(AbstractHWAgent):
             if self.drive_connected and self.space_available and records:  # Si están dadas las condiciones...
                 self.logger.info("Condiciones de copia reunidas. Iniciando respaldo de archivos")
                 self.logger.info(f"Tramos pendientes por copiar: {len(records)}")
-                self._send_msg_to_mgr(Message.system_ext_drive_in_use())
+                self._send_msg_to_mgr(Message.sys_ext_drive_in_use())
                 aux_conunter = 0
                 for row in records:
                     # Verifica que no se haya levantado el flag de fin
@@ -128,7 +131,7 @@ class DataCopy(AbstractHWAgent):
                         if e.errno == 28:  # No queda espacio en el dispositivo
                             self.logger.error("No hay espacio suficiente en el pendrive")
                             self.space_available = False
-                            self._send_msg_to_mgr(Message.system_ext_drive_full())
+                            self._send_msg_to_mgr(Message.sys_ext_drive_full())
                             break
                     except:
                         self.logger.exception("")
@@ -141,7 +144,7 @@ class DataCopy(AbstractHWAgent):
                     if not self.drive_connected:  # Si ya no están dadas las condiciones
                         break  # Sale de bucle que recorre registros
                 sync()
-                self._send_msg_to_mgr(Message.system_ext_drive_not_in_use())  # Avisa que terminó de copiar
+                self._send_msg_to_mgr(Message.sys_ext_drive_not_in_use())  # Avisa que terminó de copiar
             while not (self.drive_connected and self.space_available) and not self.flags.quit.is_set():
                 time.sleep(0.1)  # Si no están las condiciones, reintenta en 0.1 segundo
 

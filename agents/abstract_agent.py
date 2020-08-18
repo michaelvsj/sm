@@ -193,6 +193,12 @@ class AbstractHWAgent(ABC):
         else:  # Todos los demás mensajes deben ser procesados por el agente particular
             self._agent_process_manager_message(msg)
 
+    def __hw_check(self):
+        while not self.flags.quit.is_set():
+            if not self._agent_check_hw_connected():
+                self.hw_state = HWStates.NOT_CONNECTED
+            self.flags.quit.wait(1)
+
     def _send_data_to_mgr(self, data):
         msg = Message(_type=Message.DATA, arg=data).serialize()
         self.__manager_send(msg)
@@ -203,8 +209,12 @@ class AbstractHWAgent(ABC):
     def run(self):
         wrt = Thread(target=self.__file_writer)
         mgr_comm = Thread(target=self.__manager_recv)
+        hw_check = Thread(target=self.__hw_check)
         try:
             self.__manager_connect()
+
+            self.logger.info("Iniciando thread de verificación de HW conectado")
+            hw_check.start()
 
             self.logger.info("Iniciando thread de comunicación con manager")
             mgr_comm.start()
@@ -256,6 +266,8 @@ class AbstractHWAgent(ABC):
                 wrt.join(0.1)
             if mgr_comm.is_alive():
                 mgr_comm.join(0.1)
+            if hw_check.is_alive():
+                hw_check.join(0.1)
             self._agent_finalize()
             self.logger.info("Aplicación terminada\nFIN\n")
 
@@ -309,4 +321,11 @@ class AbstractHWAgent(ABC):
 
     @abstractmethod
     def _agent_disconnect_hw(self):
+        pass
+
+    @abstractmethod
+    def _agent_check_hw_connected(self) -> bool:
+        """
+        Debe retornar True si el hardware está conectado o false de lo contrario
+        """
         pass

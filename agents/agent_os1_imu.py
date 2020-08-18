@@ -10,6 +10,7 @@ import sys
 import init_agent
 from constants import AgentStatus
 from abstract_agent import AbstractHWAgent, DEFAULT_CONFIG_FILE
+from helpers import check_ping
 from os1.imu_packet import PACKET_SIZE, unpack as unpack_imu
 
 IMU_UDP_PORT = 7503
@@ -91,6 +92,8 @@ class OS1IMUAgent(AbstractHWAgent):
     def _pre_capture_file_update(self):
         pass
 
+    def _agent_check_hw_connected(self):
+        return check_ping(self.sensor_ip)
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE
