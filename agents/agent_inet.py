@@ -60,9 +60,9 @@ class InetAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.__main_thread.join(0.5)
 
     def _agent_start_capture(self):
@@ -91,7 +91,7 @@ class InetAgent(AbstractHWAgent):
         pass
 
     def __check_connectivity(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             if check_ping(self.ping_ip_1) or check_ping(self.ping_ip_2):
                 self.hw_state = HWStates.NOMINAL
             elif self.__check_iface_inet():

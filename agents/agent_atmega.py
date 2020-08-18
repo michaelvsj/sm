@@ -86,9 +86,9 @@ class AtmegaAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.__agent_main_thread.join(0.2)
         self.ser.close()
 
@@ -110,9 +110,9 @@ class AtmegaAgent(AbstractHWAgent):
         self.state = AgentStatus.STAND_BY
         self.__switch_leds_now(False)
         self.__switch_leds_now(True)
-        self.flag_quit.wait(5)
+        self.flags.quit.wait(5)
         self.__switch_leds_now(False)
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             try:
                 # Busca encabezado
                 s = self.ser.read(1)
@@ -126,10 +126,10 @@ class AtmegaAgent(AbstractHWAgent):
                 self.logger.warning("Tiemout leyendo del puerto serial conectado a CPU ATMega")
                 continue
             except KeyboardInterrupt:  # Apaga los leds
-                self.flag_quit.set()
+                self.flags.quit.set()
             except Exception as e:
                 self.logger.exception("")
-                self.flag_quit.set()
+                self.flags.quit.set()
         self.__switch_leds_now(False)
 
     def __ping_button_feedback(self):
@@ -154,7 +154,7 @@ class AtmegaAgent(AbstractHWAgent):
         :return:
         """
         unpressed = True  # Inicia sin boton presionado
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             time.sleep(0.002)
             prev_volts = self.q_volts.get()
             stability_count = -1

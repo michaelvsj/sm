@@ -62,9 +62,9 @@ class GPSAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.sensor_data_receiver.join(1.1)
         self.ser.close()
 
@@ -83,7 +83,7 @@ class GPSAgent(AbstractHWAgent):
         self.ser.close()
 
     def __receive_and_pipe_data(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             if self.simulate:
                 r = self.__read_from_simulator()
             else:
@@ -95,7 +95,7 @@ class GPSAgent(AbstractHWAgent):
                         self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
 
     def __read_from_simulator(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             # Inicialización
             if not isinstance(self.datapoint["longitude"], float):
                 self.datapoint["longitude"] = -73.22029516666667
@@ -131,7 +131,7 @@ class GPSAgent(AbstractHWAgent):
         """
         Devuelve True cuando pudo actualizar la coordenada y false de lo contrario
         """
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             try:
                 bytes_in = self.ser.readline()
             except (serial.SerialException, serial.SerialTimeoutException):

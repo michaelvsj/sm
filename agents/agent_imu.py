@@ -55,9 +55,9 @@ class IMUAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.__main_thread.join(0.1)
         self.yost_api.disconnect()
         self.yost_api = None
@@ -78,7 +78,7 @@ class IMUAgent(AbstractHWAgent):
     def __receive_and_pipe_data(self):
         self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
         self.yost_api.start_streaming()
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             try:
                 data = self.yost_api.read_datapoint()
                 if data:

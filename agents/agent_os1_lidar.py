@@ -69,9 +69,9 @@ class OS1LiDARAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
@@ -102,8 +102,9 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.logger.info("Construyendo tabla trigonométrica")
         build_trig_table(beam_alt_angles, beam_az_angles)
         self.active_channels = tuple(idx for idx, val in enumerate(beam_alt_angles) if val != 0)
+        self.logger.info("Inicializando LiDAR. Esto tarda unos 20 segundos.")
         self.os1.start()
-        time.sleep(20)  # TODO: consultar estado hasta que sea "running"
+        self.flags.quit.wait(20)  # TODO: consultar estado hasta que sea "running"
         return True
 
     def _agent_disconnect_hw(self):
@@ -121,7 +122,7 @@ class OS1LiDARAgent(AbstractHWAgent):
             pkt = self.sock.recv(PACKET_SIZE)
             bytes_recvd += len(pkt)
 
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             packet, address = self.sock.recvfrom(PACKET_SIZE)
             if not self.state == AgentStatus.CAPTURING:
                 continue

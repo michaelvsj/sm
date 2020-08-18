@@ -52,9 +52,9 @@ class OS1IMUAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.sensor_data_receiver.join(0.5)
         self.sock.close()
 
@@ -78,7 +78,7 @@ class OS1IMUAgent(AbstractHWAgent):
             pass
 
     def __read_from_imu(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             packet, address = self.sock.recvfrom(PACKET_SIZE)
             if not self.state == AgentStatus.CAPTURING:
                 continue

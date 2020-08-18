@@ -15,12 +15,24 @@ TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
 DEFAULT_CONFIG_FILE = 'config.yaml'
 
+class Flags:
+    """
+    Contiene los eventos relevantes para controlar el flujo
+    """
+
+    def __init__(self):
+        self.start_capture = Event()  # Manager solicita iniciar captura
+        self.end_capture = Event()  # Manager solicita detener captura
+        self.new_folder = Event()  # Manager pide cambio de directorio
+        self.quit = Event() # Para indicar el fin de la aplicación
+
 
 class AbstractHWAgent(ABC):
     def __init__(self, config_section, config_file=DEFAULT_CONFIG_FILE):
         self.logger = logging.getLogger()
         self.output_file_name = ''
         self.output_folder = ''
+        self.flags = Flags()
         self.state = AgentStatus.STARTING
         self.hw_state = HWStates.NOT_CONNECTED
         self.manager_ip_address = ("0.0.0.0", 0)  # (IP, port) del manager que envia los comandos
@@ -29,7 +41,6 @@ class AbstractHWAgent(ABC):
         self.config_section = config_section
         self.config = dict()
         self.flag_quit = Event()    #Bandera para avisar que hay que terminar el programa
-        self.dq_from_mgr = deque()  #deque con los comandos provenientes del manager
         self.dq_formatted_data = deque() #Deque que contiene la data formateada lista para escribir a disco
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.local_tcp_port = ''
@@ -48,30 +59,23 @@ class AbstractHWAgent(ABC):
                 self.__sock.bind((TCP_IP, self.local_tcp_port))
             except OSError as e:
                 if e.errno == errno.EADDRINUSE:
-                    self.logger.error(f"Dirección ya está en uso: {TCP_IP}:{self.local_tcp_port}")
+                    self.logger.error(f"Dirección ya está en uso: {TCP_IP}:{self.local_tcp_port}. Termina programa. \nFIN\n")
                 else:
                     self.logger.exception("")
                 sys.exit(1)
             self.__sock.listen(1)
             self.__sock.setblocking(True)
-            self.__manager_connect()
-            if self.__hw_connect_insist():
-                self.state = AgentStatus.STAND_BY
-            else:
-                self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
-                                  f"Terminando proceso")
-                sys.exit(1)
         except KeyboardInterrupt:
             sys.exit(0)
 
     def __hw_connect_insist(self):
         attempts = 0
-        while attempts < self.hw_connections_retries and not self.flag_quit.is_set():
+        while attempts < self.hw_connections_retries and not self.flags.quit.is_set():
             if self._agent_connect_hw():
                 self.hw_state = HWStates.NOMINAL
                 return True
             else:
-                self.flag_quit.wait(1)
+                self.flags.quit.wait(1)
                 attempts += 1
         return False
 
@@ -108,7 +112,7 @@ class AbstractHWAgent(ABC):
             self.output_file.write(self.output_file_header + os.linesep)
 
     def __file_writer(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             if self.state == AgentStatus.CAPTURING \
                     and self.output_file is not None \
                     and len(self.dq_formatted_data) \
@@ -128,34 +132,30 @@ class AbstractHWAgent(ABC):
             pass
 
     def __manager_connect(self):
-        self.logger.info("Esperando conexión de manager")
         connected = False
-        while not connected and not self.flag_quit.is_set():
+        while not connected and not self.flags.quit.is_set():
             try:
+                self.logger.info("Esperando conexión de manager")
                 self.connection, client_address = self.__sock.accept()
                 connected = True
+                self.logger.info("Manager conectado")
             except socket.timeout:
-                self.logger.info("Timeout esperando conexión de manager. Sigo esperando.")
+                self.logger.info("Timeout esperando conexión de manager.")
                 pass
             except KeyboardInterrupt:
                 raise
-        self.logger.info("Manager conectado")
-        self.state = AgentStatus.STAND_BY
 
     def __manager_recv(self):
-        """
-        Este método debe recibir, parsear y colocar las instrucciones desde el manager en un deque para ser leido desde el bucle principal
-        :return:
-        """
         cmd = b''
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             try:
                 bt = self.connection.recv(1)
                 if not bt:
                     self.logger.warning(f"Conexión cerrada por manager")
-                    self.__manager_connect()  # Intenta reconexión
+                    self.flag_quit.wait(0.5)
+                    raise ConnectionResetError
                 elif bt == Message.EOT:
-                    self.dq_from_mgr.appendleft(Message.deserialize(cmd))
+                    self.__process_incoming_message(Message.deserialize(cmd))
                     cmd = b''
                 else:
                     cmd += bt
@@ -163,7 +163,6 @@ class AbstractHWAgent(ABC):
                 pass
             except ConnectionResetError:
                 self.__manager_connect()
-        self.connection.close()
 
     def __manager_send(self, msg):
         try:
@@ -172,10 +171,27 @@ class AbstractHWAgent(ABC):
             pass
         except OSError as e:
             if e.errno == errno.EBADF:
-                if not self.flag_quit.is_set():
+                if not self.flags.quit.is_set():
                     self.logger.warning(f"No se pudo enviar mensje {msg} al manager. Se perdió la conexión.")
             else:
                 self.logger.exception("")
+
+    def __process_incoming_message(self, msg: Message):
+        if msg.arg == Message.CMD_QUERY_AGENT_STATE:
+            self.__manager_send(Message.agent_state(self.state).serialize())
+        elif msg.arg == Message.CMD_QUERY_HW_STATE:
+            self.__manager_send(Message.agent_hw_state(self.hw_state).serialize())
+        elif msg.arg == Message.CMD_QUIT:
+            self.logger.info(f"Comando {msg.arg} recibido desde manager. Seteando bandera self.flags.quit")
+            self.flags.quit.set()
+        elif msg.typ == Message.SET_FOLDER:
+            self.__update_capture_file(msg.arg)
+        elif msg.arg == Message.CMD_END_CAPTURE:
+            self.flags.end_capture.set()
+        elif msg.arg == Message.CMD_START_CAPTURE:
+            self.flags.start_capture.set()
+        else:  # Todos los demás mensajes deben ser procesados por el agente particular
+            self._agent_process_manager_message(msg)
 
     def _send_data_to_mgr(self, data):
         msg = Message(_type=Message.DATA, arg=data).serialize()
@@ -185,63 +201,63 @@ class AbstractHWAgent(ABC):
         self.__manager_send(msg.serialize())
 
     def run(self):
-        self.logger.info("Iniciando thread de comunicación con manager")
-        mgr_comm = Thread(target=self.__manager_recv, daemon=True)
-        mgr_comm.start()
-
-        self.logger.info("Iniciando thread de escritura a disco")
         wrt = Thread(target=self.__file_writer)
-        if self.output_file_name:
-            wrt.start()
-
-        self.logger.info("Iniciando threads de manejo de datos de hardware")
-        self._agent_run_data_threads()
-        self.logger.info("Iniciando bucle principal")
+        mgr_comm = Thread(target=self.__manager_recv)
         try:
-            while not self.flag_quit.is_set():
+            self.__manager_connect()
+
+            self.logger.info("Iniciando thread de comunicación con manager")
+            mgr_comm.start()
+
+            if self.__hw_connect_insist():
+                self.state = AgentStatus.STAND_BY
+            else:
+                self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. "
+                                  f"Terminando proceso")
+                sys.exit(1)
+
+            self.logger.info("Iniciando thread de escritura a disco")
+            if self.output_file_name:
+                wrt.start()
+
+            self.logger.info("Iniciando threads de manejo de datos de hardware")
+            self._agent_run_data_threads()
+
+            self.logger.info("Iniciando bucle principal")
+            while not self.flags.quit.is_set():
                 time.sleep(0.01)
-                if len(self.dq_from_mgr):
-                    msg = self.dq_from_mgr.pop()
-                    if msg.arg == Message.CMD_END_CAPTURE:
-                        self.state = AgentStatus.STAND_BY
-                    elif msg.arg == Message.CMD_START_CAPTURE:
-                        self.state = AgentStatus.CAPTURING
-                    elif msg.arg == Message.CMD_QUERY_AGENT_STATE:
-                        self.__manager_send(Message.agent_state(self.state).serialize())
-                    elif msg.arg == Message.CMD_QUERY_HW_STATE:
-                        self.__manager_send(Message.agent_hw_state(self.hw_state).serialize())
-                    elif msg.arg == Message.CMD_QUIT:
-                        self.flag_quit.set()
-                        break
-                    elif msg.typ == Message.SET_FOLDER:
-                        self.__update_capture_file(msg.arg)
-                    else:  # Todos los demás mensajes deben ser procesados por el agente particular
-                        self._agent_process_manager_message(msg)
-                #TODO: revisar si acaso es mejor que sea el manager el que reinicie los agentes
-                #La ventaja es que el manager puede detener la captura e impedir nuevas capturas hasta que los agentes
-                # vuelvan a estar conectados
+                if self.flags.start_capture.is_set():
+                    self.flags.start_capture.clear()
+                    self.state = AgentStatus.CAPTURING
+                    self.logger.info(f"Cambiando estado a {self.state}")
+                if self.flags.end_capture.is_set():
+                    self.flags.end_capture.clear()
+                    self.state = AgentStatus.STAND_BY
+                    self.logger.info(f"Cambiando estado a {self.state}")
                 if self.hw_state == HWStates.NOT_CONNECTED or self.hw_state == HWStates.ERROR:
                     self.logger.error(f"Hardware en estado {self.hw_state}. Se intentará reconexion.")
-                    self._agent_disconnect_hw()
                     self.state = AgentStatus.STARTING
+                    self.logger.info(f"Cambiando estado a {self.state}")
+                    self._agent_disconnect_hw()
                     if self.__hw_connect_insist():
                         self.state = AgentStatus.STAND_BY
+                        self.logger.info(f"Cambiando estado a {self.state}")
                     else:
                         self.logger.error(f"No fue posible conectarse al hardware. Intentos: {self.hw_connections_retries}. \nFIN\n")
-                        sys.exit(1)
+                        break
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
         except Exception:
             self.logger.exception("")
         finally:
             self.logger.info("Terminando aplicación")
-            self.flag_quit.set()
+            self.flags.quit.set()
             if wrt.is_alive():
-                wrt.join(0.5)
+                wrt.join(0.1)
+            if mgr_comm.is_alive():
+                mgr_comm.join(0.1)
             self._agent_finalize()
-            self.connection.close()
-            self.__sock.close()
-            self.logger.info("Aplicación terminada")
+            self.logger.info("Aplicación terminada\nFIN\n")
 
     @abstractmethod
     def _agent_process_manager_message(self, msg: Message):

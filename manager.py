@@ -153,7 +153,7 @@ class FRAICAPManager:
             if agt.enabled:
                 pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"], stdin=DEVNULL, stdout=DEVNULL, stderr=STDOUT).pid
                 self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
-        time.sleep(0.5)  # Les da tiempo para partir antes de intentar conexión
+        self.flags.quit.wait(1)  # Les da tiempo para partir antes de intentar conexión
         for agt in self.agents.items():
             if agt.enabled:
                 agt.connect()
@@ -376,6 +376,7 @@ class FRAICAPManager:
                         if self.state == States.STAND_BY:
                             self.logger.info(
                                 "Sesión de captura forzada (sin esperar velocidad) iniciada por usuario por el usuario.")
+                            self.flags.vehicle_moving.set()
                             self.new_session()
                             self.start_capture()
                             self.state = States.CAPTURING

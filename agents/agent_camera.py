@@ -48,9 +48,9 @@ class CameraAgent(AbstractHWAgent):
         :return:
         """
         try:
-            assert (self.flag_quit.is_set())  # Este flag debiera estar seteado en este punto
+            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flag_quit'")
+            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
         self.__image_cap_thread.join(self.period + 0.5)
 
     def _agent_start_capture(self):
@@ -77,7 +77,7 @@ class CameraAgent(AbstractHWAgent):
         pass
 
     def __capture_image(self):
-        while not self.flag_quit.is_set():
+        while not self.flags.quit.is_set():
             if not self.output_folder or not self.state == AgentStatus.CAPTURING or self.hw_state == HWStates.NOT_CONNECTED:
                 time.sleep(0.1)
                 continue
