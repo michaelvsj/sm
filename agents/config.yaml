@@ -17,7 +17,7 @@ agent_gps:
   manager_port: 0
   local_port: 30003
   output_file_name: gps.csv
-  com_port: /dev/ttyACM0 #/dev/ttyGPS0
+  com_port: /dev/null #/dev/ttyACM0 #/dev/ttyGPS0
   usb_id: 067b:2303
   baudrate: 4800
   simulate: False
@@ -34,7 +34,7 @@ agent_imu:
   output_file_name: yost_3space_imu.csv
   sample_rate: 200 #Hz
   usb_id: 2476:1010
-  com_port: /dev/ttyACM2
+  com_port: /dev/ttyACM0
 agent_atmega:
   manager_port: 0
   local_port: 30006

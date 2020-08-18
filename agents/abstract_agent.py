@@ -174,19 +174,20 @@ class AbstractHWAgent(ABC):
                 self.logger.exception("")
 
     def __process_incoming_message(self, msg: Message):
-        if msg.arg == Message.CMD_QUERY_AGENT_STATE:
+        if msg.typ == Message.QUERY_AGENT_STATE:
             self.__manager_send(Message.agent_state(self.state).serialize())
-        elif msg.arg == Message.CMD_QUERY_HW_STATE:
+        elif msg.typ == Message.QUERY_HW_STATE:
             self.__manager_send(Message.agent_hw_state(self.hw_state).serialize())
-        elif msg.arg == Message.CMD_QUIT:
+        elif msg.typ == Message.QUIT:
             self.logger.info(f"Comando {msg.arg} recibido desde manager. Seteando bandera self.flags.quit")
             self.flags.quit.set()
-        elif msg.typ == Message.SET_FOLDER:
+        elif msg.typ == Message.NEW_CAPTURE:
             self.__update_capture_file(msg.arg)
-        elif msg.arg == Message.CMD_END_CAPTURE:
-            self.flags.end_capture.set()
-        elif msg.arg == Message.CMD_START_CAPTURE:
+            self.flags.end_capture.clear()
             self.flags.start_capture.set()
+        elif msg.typ == Message.END_CAPTURE:
+            self.flags.start_capture.clear()
+            self.flags.end_capture.set()
         else:  # Todos los demás mensajes deben ser procesados por el agente particular
             self._agent_process_manager_message(msg)
 
@@ -194,6 +195,7 @@ class AbstractHWAgent(ABC):
         while not self.flags.quit.is_set():
             if not self._agent_check_hw_connected():
                 self.hw_state = HWStates.NOT_CONNECTED
+
             self.flags.quit.wait(1)
 
     def _send_data_to_mgr(self, data):
@@ -217,8 +219,8 @@ class AbstractHWAgent(ABC):
             mgr_comm.start()
 
             self.logger.info("Conectado al hardware")
-            if self.__hw_connect_insist():
-                self.state = AgentStatus.STAND_BY
+            self.__hw_connect_insist()
+            self.state = AgentStatus.STAND_BY
 
             self.logger.info("Iniciando thread de escritura a disco")
             if self.output_file_name:
@@ -244,10 +246,9 @@ class AbstractHWAgent(ABC):
                     self.logger.info(f"Cambiando estado a {self.state}")
                     self._agent_disconnect_hw()
                     self.logger.info("Reconectando al hardware")
-                    if self.__hw_connect_insist():
-                        self.state = AgentStatus.STAND_BY
-                        self.logger.info(f"Cambiando estado a {self.state}")
-
+                    self.__hw_connect_insist()
+                    self.state = AgentStatus.STAND_BY
+                    self.logger.info(f"Cambiando estado a {self.state}")
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
         except Exception:
@@ -293,7 +294,6 @@ class AbstractHWAgent(ABC):
     def _agent_run_data_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
         """
         pass
 
@@ -301,14 +301,17 @@ class AbstractHWAgent(ABC):
     def _agent_finalize(self):
         """
         Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
+        Detiene el streaing desde el sensor
+        Termina la conexión al sensor
         """
         pass
 
     @abstractmethod
     def _agent_connect_hw(self) -> bool:
         """
+        El agente debe conectarse al hardware e iniciar su streaming de datos
         Debe salir indicando si la conexión fue exitosa (True) o no (False)
+        :return: True or False
         """
         pass
 

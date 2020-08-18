@@ -39,13 +39,8 @@ def build_packet(command, arguments, inc_resp_header=False):
     return start_byte + command + arguments + checksum
 
 
-class Yost3SpaceAPI():
+class Yost3SpaceAPI:
     def __init__(self, com_port, sample_rate):
-        """
-
-        :param serial_con: An open serial connection
-        :param sample_rate: Desired mample rate in Hz
-        """
         self.com_port = com_port
         self.ser = serial.Serial()
         self.sample_rate = min(sample_rate, MAX_SAMPLE_RATE)
@@ -110,7 +105,11 @@ class Yost3SpaceAPI():
         while not self.streaming:
             time.sleep(1/self.sample_rate)
             continue
-        bytes_in = self.ser.read(DATA_LEN)
+        bytes_in = b''
+        try:
+            bytes_in = self.ser.read(DATA_LEN)
+        except (serial.SerialException, serial.SerialTimeoutException):
+            pass
         if len(bytes_in) == DATA_LEN:
             return unpack(bytes_in)
         else:

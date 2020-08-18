@@ -132,20 +132,19 @@ class GPSAgent(AbstractHWAgent):
         """
         Devuelve True cuando pudo actualizar la coordenada y false de lo contrario
         """
-        while not self.flags.quit.is_set():
+        try:
+            bytes_in = self.ser.readline()
+        except (serial.SerialException, serial.SerialTimeoutException):
+            self.logger.exception(f"Error al leer del GPS")
+            self.hw_state = HWStates.ERROR
+            return False
+        if len(bytes_in):
             try:
-                bytes_in = self.ser.readline()
-            except (serial.SerialException, serial.SerialTimeoutException):
-                self.logger.exception(f"Error al leer del GPS. Reseteando conexión")
-                self._agent_disconnect_hw()
-                continue
-            if len(bytes_in):
-                try:
-                    decoded = bytes_in.decode('ASCII')
-                    if self.__parse_nmea(decoded):
-                        return True
-                except UnicodeDecodeError:
-                    self.logger.exception("")
+                decoded = bytes_in.decode('ASCII')
+                if self.__parse_nmea(decoded):
+                    return True
+            except UnicodeDecodeError:
+                self.logger.exception("")
 
     def __parse_nmea(self, _msg):
         try:

@@ -286,11 +286,13 @@ class FRAICAPManager:
             if k == KEY_QUIT:
                 break
 
+    """
     def start_capture(self):
         self.new_segment()
         for agt in self.agents.items():
             if agt.enabled:
                 agt.send_msg(Message.cmd_start_capture())
+    """
 
     def end_capture(self):
         for agt in self.agents.items():
@@ -307,7 +309,7 @@ class FRAICAPManager:
         self.logger.info(f"Nuevo segmento: {self.session}/{self.segment:04d}")
         for agt in self.agents.items():
             if agt.enabled:
-                agt.send_msg(Message.set_folder(self.capture_dir))
+                agt.send_msg(Message.new_capture(self.capture_dir))
 
     def update_segment_record(self):
         """
@@ -393,7 +395,7 @@ class FRAICAPManager:
                                 "Sesión de captura forzada (sin esperar velocidad) iniciada por el usuario.")
                             self.flags.vehicle_moving.set()
                             self.new_session()
-                            self.start_capture()
+                            self.new_segment()
                             self.change_state(States.CAPTURING)
                 elif self.flags.segment_ended.isSet():
                     if self.state == States.CAPTURING:
@@ -404,7 +406,7 @@ class FRAICAPManager:
                     if self.flags.vehicle_moving.is_set():
                         if self.state == States.WAITING_SPEED:
                             self.logger.info("Vehículo en movimiento. Inicia/reinicia captura")
-                            self.start_capture()
+                            self.new_segment()
                             self.change_state(States.CAPTURING)
                     else:
                         if self.state == States.CAPTURING:

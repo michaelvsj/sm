@@ -8,11 +8,11 @@ Path('logs').mkdir(exist_ok=True)
 
 my_socks = {}
 
-my_socks["os1_lidar"] = {'address':('127.0.0.1', 30001), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+#my_socks["os1_lidar"] = {'address':('127.0.0.1', 30001), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 #my_socks["os1_imu"] = {'address':('127.0.0.1', 30002), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 #my_socks["gps"] = {'address':('127.0.0.1', 30003), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 #my_socks["camera"] = {'address':('127.0.0.1', 30004), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
-#my_socks["imu"] = {'address': ('127.0.0.1', 30005), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+my_socks["imu"] = {'address': ('127.0.0.1', 30005), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 
 for item in my_socks.values():
     item['socket'].setblocking(True)
@@ -67,17 +67,14 @@ if "os1_lidar" in my_socks.keys():
 
 _dir = f'/home/mich/temp/capture/000'
 Path(_dir).mkdir(parents=True, exist_ok=True)
-msg = Message.set_folder(_dir).serialize()
+msg = Message.new_capture(_dir).serialize()
 send_to_all_agents(msg)
 
-msg = Message.cmd_start_capture().serialize()
-send_to_all_agents(msg)
-
-for i in range(1, 10):
+for i in range(1, 1000):
     time.sleep(5)
     _dir = f'/home/mich/temp/capture/{i:03d}'
     Path(_dir).mkdir(parents=True, exist_ok=True)
-    msg = Message.set_folder(_dir).serialize()
+    msg = Message.new_capture(_dir).serialize()
     send_to_all_agents(msg)
 
 time.sleep(1)

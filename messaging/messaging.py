@@ -12,15 +12,12 @@ class Message:
     SYS_STATE = "SYS_STATE"
     HW_STATE = "HW_STATE"
     AGENT_STATE = "AGENT_STATE"
-    SET_FOLDER = "SET_FOLDER"
+    NEW_CAPTURE = "NEW_CAPTURE"
+    END_CAPTURE = "END_CAPTURE"
     DATA = "DATA"   # tipo más bien genérico, donde la estructura del argumento debe ser conocida por el manager y por el agente
-
-    # Commands
-    CMD_QUIT = "QUIT"
-    CMD_START_CAPTURE = "START_CAPTURE"
-    CMD_END_CAPTURE = "END_CAPTURE"
-    CMD_QUERY_AGENT_STATE = "QUERY_AGENT_STATE"
-    CMD_QUERY_HW_STATE = "QUERY_HW_STATE"
+    QUIT = "QUIT"
+    QUERY_AGENT_STATE = "QUERY_AGENT_STATE"
+    QUERY_HW_STATE = "QUERY_HW_STATE"
 
     # System states
     SYS_ONLINE = "ONLINE"
@@ -35,7 +32,7 @@ class Message:
 
     EOT = b'\x1E'     # Separador de mensajes
 
-    def __init__(self, _type, arg):
+    def __init__(self, _type, arg=''):
         self.typ = _type
         self.arg = arg
 
@@ -65,27 +62,23 @@ class Message:
 
     @classmethod
     def cmd_quit(cls):
-        return cls(cls.COMMAND, cls.CMD_QUIT)
-
-    @classmethod
-    def cmd_start_capture(cls):
-        return cls(cls.COMMAND, cls.CMD_START_CAPTURE)
+        return cls(cls.QUIT)
 
     @classmethod
     def cmd_end_capture(cls):
-        return cls(cls.COMMAND, cls.CMD_END_CAPTURE)
+        return cls(cls.END_CAPTURE)
 
     @classmethod
     def cmd_query_agent_state(cls):
-        return cls(cls.COMMAND, cls.CMD_QUERY_AGENT_STATE)
+        return cls(cls.QUERY_AGENT_STATE)
 
     @classmethod
     def cmd_query_hw_state(cls):
-        return cls(cls.COMMAND, cls.CMD_QUERY_HW_STATE)
+        return cls(cls.QUERY_HW_STATE)
 
     @classmethod
-    def set_folder(cls, _dir):
-        return cls(cls.SET_FOLDER, _dir)
+    def new_capture(cls, _dir):
+        return cls(cls.NEW_CAPTURE, _dir)
 
     @classmethod
     def sys_online(cls):

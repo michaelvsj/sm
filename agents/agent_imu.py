@@ -24,11 +24,10 @@ class IMUAgent(AbstractHWAgent):
         AbstractHWAgent.__init__(self, config_section=self.agent_name, config_file=config_file)
         self.logger = logging.getLogger(self.agent_name)
         self.output_file_is_binary = False
-        self.write_data = Event()
-        self.write_data.clear()
         self.com_port = ""
         self.ser = None
         self.output_file_header = HEADER
+        self.__flag_stop = Event()
 
     def _agent_process_manager_message(self, msg):
         pass
@@ -46,8 +45,7 @@ class IMUAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.__main_thread = Thread(target=self.__receive_and_pipe_data)
-        self.__main_thread.start()
+        pass
 
     def _agent_finalize(self):
         """
@@ -64,22 +62,30 @@ class IMUAgent(AbstractHWAgent):
         self.yost_api = None
 
     def _agent_connect_hw(self):
-        self.write_data.clear()
         self.yost_api = Yost3SpaceAPI(self.com_port, self.sample_rate)
         try:
+            self.logger.info("Configurando IMU")
             self.yost_api.setup()
+            self.logger.info("Iniciando streaming de datos desde IMU")
+            self.yost_api.start_streaming()
+            self.__flag_stop.clear()
+            self.__main_thread = Thread(target=self.__receive_and_pipe_data)
+            self.__main_thread.start()
             return True
         except (serial.SerialException, serial.SerialTimeoutException):
-            self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
+            self.logger.error(f"Error al conectarse al puerto {self.com_port}")
+            self.yost_api = None
+            self.flags.quit.wait(1)
             return False
 
     def _agent_disconnect_hw(self):
+        self.__flag_stop.set()
+        self.__main_thread.join(0.2)
         self.yost_api.disconnect()
+        self.yost_api = None
 
     def __receive_and_pipe_data(self):
-        self.logger.info("Enviando comando a IMU para que inicie streaming de datos")
-        self.yost_api.start_streaming()
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.__flag_stop.is_set():
             try:
                 data = self.yost_api.read_datapoint()
                 if data:
@@ -87,11 +93,13 @@ class IMUAgent(AbstractHWAgent):
                     if self.state == AgentStatus.CAPTURING:
                         self.dq_formatted_data.append(data_line)
                 else:
-                    self.hw_state = HWStates.ERROR
-                    self.logger.exception("Error al leer del acelerómetro vía puerto serial")
+                    if self.hw_state == HWStates.NOMINAL:
+                        self.logger.error("Error al leer del acelerómetro vía puerto serial")
+                        self.hw_state = HWStates.ERROR
             except Exception:
-                self.hw_state = HWStates.ERROR
-                self.logger.exception("Error al leer del acelerómetro vía puerto serial")
+                self.logger.exception("")
+                if self.hw_state == HWStates.NOMINAL:
+                    self.hw_state = HWStates.ERROR
         try:
             self.yost_api.stop_streaming()
         except:

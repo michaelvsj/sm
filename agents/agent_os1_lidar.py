@@ -132,7 +132,6 @@ class OS1LiDARAgent(AbstractHWAgent):
             except:
                 self.logger.exception("")
 
-
         self.logger.debug("Inicia bucle principal de __read_from_lidar")
         while not self.flags.quit.is_set():
             try:
