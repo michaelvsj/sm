@@ -35,6 +35,7 @@ class GPSAgent(AbstractHWAgent):
         self.output_file_header = ";".join([k for k in self.datapoint.keys()])
         self.sim_acceleration_sign = 1  # Usado para simular aceleración y frenado
         self.geod = Geod(ellps='WGS84')
+        self.flags.stop_receiving = Event()
 
     def _agent_process_manager_message(self, msg):
         pass
@@ -53,8 +54,7 @@ class GPSAgent(AbstractHWAgent):
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
         """
-        self.sensor_data_receiver = Thread(target=self.__receive_and_pipe_data)
-        self.sensor_data_receiver.start()
+        pass
 
     def _agent_finalize(self):
         """
@@ -66,34 +66,36 @@ class GPSAgent(AbstractHWAgent):
             assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
-        self.sensor_data_receiver.join(1.1)
+        self.__thread_data_rcv.join(1.1)
         self.ser.close()
 
     def _agent_connect_hw(self):
-        self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
-        if isinstance(self.ser, serial.Serial) and self.ser.is_open:
-            return True
         try:
+            self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
             self.ser = serial.Serial(self.com_port, self.baudrate, timeout=READ_TIMEOUT)
+            self.flags.stop_receiving.clear()
+            self.__thread_data_rcv = Thread(target=self.__receive_and_pipe_data)
+            self.__thread_data_rcv.start()
             return True
         except (serial.SerialException, serial.SerialTimeoutException):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
     def _agent_disconnect_hw(self):
+        self.flags.stop_receiving.set()
+        self.__thread_data_rcv.join(1.1)
         self.ser.close()
 
     def __receive_and_pipe_data(self):
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.flags.stop_receiving.is_set():
             if self.simulate:
                 r = self.__read_from_simulator()
             else:
                 r = self.__read_from_gps()
-            if r:
-                if self.__update_data():
-                    self._send_data_to_mgr(self.datapoint)
-                    if self.state == AgentStatus.CAPTURING:
-                        self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
+            if r and self.__update_data():
+                self._send_data_to_mgr(self.datapoint)
+                if self.state == AgentStatus.CAPTURING:
+                    self.dq_formatted_data.append(";".join(str(val) for val in self.datapoint.values()))
 
     def __read_from_simulator(self):
         while not self.flags.quit.is_set():
@@ -188,7 +190,9 @@ class GPSAgent(AbstractHWAgent):
                                                  self.last_coords[1])
                 self.last_coords = current_coords
                 self.datapoint["distance_delta"] = round(dist, 1)  # 1 decimal basta
-                self.logger.debug(f"Actualizando status a: {self.datapoint} ")
+                self.datapoint["latitude"] = round(self.datapoint["latitude"], 5)
+                self.datapoint["longitude"] = round(self.datapoint["longitude"], 5)
+                self.logger.debug(f"Nuevo estado: {list(self.datapoint.values())} ")
                 return True
             else:
                 return False

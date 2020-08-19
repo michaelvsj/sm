@@ -21,7 +21,7 @@ LOCALHOST = '127.0.0.1'
 KEY_QUIT = 'q'  # Comando de teclado para terminar el programa
 KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
 FORCE_START = 'f'  # inicia captura inmediatamente, sin esperar que vehículo inice movimiento
-
+SINGLE_BUTTON = 'bSingleButton'
 
 class Flags:
     """
@@ -32,7 +32,6 @@ class Flags:
         self.vehicle_moving = Event()   
         self.segment_timeout = Event()  # Ha pasado más de T segundos desde que comenzó la captura del segmento
         self.segment_ended = Event()  # El vehículo ya avanzó más de X metros desde que comenzó la captura del segmento
-        self.new_command = Event()  # El usuario presionó el boton de inicio/fin de captura o una tecla en consola. Como sea, hay un nuevo comando en la cola de comandos
         self.quit = Event()  # Para indicar el fin de la aplicación
         self.critical_agents_ready = Event()
 
@@ -85,7 +84,7 @@ class FRAICAPManager:
         self.set_up(manager_config_file, agents_config_file)
         self.session = None # Identificador de sesión de captura. La sesión inicia y termina con el apriete del boton (o tecla 's')
         self.segment = 0000 # Identificador del segmento dentro de la sesión. Número correlativo
-        self.sys_id = 'NN'
+        self.sys_id = 'NNN'
 
     def set_up(self, manager_config_file, agents_config_file):
         try:
@@ -227,7 +226,7 @@ class FRAICAPManager:
             if self.state == States.CAPTURING and time.time() > self.segment_current_init_time + \
                     self.mgr_cfg['capture']['splitting_time']:
                 self.logger.debug(
-                    f"Tiempo acumulado en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} segundos. "
+                    f"Tiempo en útlimo tramo: {time.time() - self.segment_current_init_time:.1f} s. "
                     f"Seteando bandera para generar nuevo tramo")
                 self.flags.segment_ended.set()
                 continue
@@ -239,18 +238,12 @@ class FRAICAPManager:
                 dist = float(gps_datapoint['distance_delta'])
                 speed = float(gps_datapoint['spd_over_grnd'])
                 self.segment_current_length += dist
-
-                # Pausa por detención
                 if speed < self.mgr_cfg['capture']['pause_speed']:
                     self.logger.debug(f"GPS speed:{speed}")
                     self.flags.vehicle_moving.clear()
-
-                # Reactivación post-detención
                 if speed > self.mgr_cfg['capture']['resume_speed']:
                     self.logger.debug(f"GPS speed:{speed}")
                     self.flags.vehicle_moving.set()
-
-                # División de captura en tramos, por distancia
                 if self.segment_current_length > self.mgr_cfg['capture']['splitting_distance']:
                     self.logger.debug(f"GPS Dist. acum.: {self.segment_current_length}")
                     self.flags.segment_ended.set()
@@ -259,7 +252,9 @@ class FRAICAPManager:
         while not self.flags.quit.is_set():
             b = self.agents.ATMEGA.get_data()
             if b is not None:
-                self.q_user_commands.put(b)
+                self.logger.debug(f"Boton {b} presionado")
+                if b == SINGLE_BUTTON:
+                    self.q_user_commands.put(KEY_START_STOP)
             time.sleep(0.1)
 
     def check_critical_agents_ready(self):
@@ -282,7 +277,6 @@ class FRAICAPManager:
             k = input()
             if k:
                 self.q_user_commands.put(k[0])
-                self.flags.new_command.set()
             if k == KEY_QUIT:
                 break
 
@@ -373,11 +367,9 @@ class FRAICAPManager:
         self.change_state(States.STAND_BY)
         while not self.flags.quit.is_set():
             try:
-                if self.flags.new_command.is_set():
+                if not self.q_user_commands.empty():
                     cmd = self.q_user_commands.get()
                     self.logger.debug(f"Procesando comando de usuario: '{cmd}'")
-                    if self.q_user_commands.empty():
-                        self.flags.new_command.clear()
                     if cmd == KEY_QUIT:
                         self.flags.quit.set()
                     elif cmd == KEY_START_STOP:
