@@ -219,8 +219,9 @@ class AbstractHWAgent(ABC):
             self.logger.info("Iniciando thread de comunicación con manager")
             mgr_comm.start()
 
-            self.logger.info("Conectado al hardware")
+            self.logger.info("Conectando al hardware")
             self.__hw_connect_insist()
+            self.logger.info("Hardware conectado")
             self.state = AgentStatus.STAND_BY
 
             self.logger.info("Iniciando thread de escritura a disco")
@@ -248,6 +249,7 @@ class AbstractHWAgent(ABC):
                     self._agent_hw_stop()
                     self.logger.info("Reconectando al hardware")
                     self.__hw_connect_insist()
+                    self.logger.info("Hardware reconectado")
                     self.state = AgentStatus.STAND_BY
                     self.logger.info(f"Cambiando estado a {self.state}")
         except KeyboardInterrupt:

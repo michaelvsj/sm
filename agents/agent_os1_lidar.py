@@ -41,6 +41,7 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_valid = 0
         self.blocks_invalid = 0
         self.active_channels = ()
+        self.stats_are_valid = False
 
     def _agent_config(self):
         self.sensor_ip = self.config["sensor_ip"]
@@ -116,6 +117,7 @@ class OS1LiDARAgent(AbstractHWAgent):
 
     def __read_from_lidar(self):
         self.logger.debug("Iniciando __read_from_lidar")
+        self.stats_are_valid = False
         os_buffer_size = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
 
         # Al iniciar, se salta el primer lote de paquetes que son los que están en el buffer y son "viejos"
@@ -126,7 +128,6 @@ class OS1LiDARAgent(AbstractHWAgent):
                 bytes_recvd += len(pkt)
             except:
                 pass
-
         while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 packet, address = self.sock.recvfrom(PACKET_SIZE)
@@ -141,6 +142,7 @@ class OS1LiDARAgent(AbstractHWAgent):
                         self.dq_formatted_data.append(packed)
 
                         # Recopilación de datos para estadística de paquetes
+                        self.stats_are_valid = True  # estadísticas solo son válidas mientras se están recopilando
                         frame_id = int.from_bytes(packet[10:12], byteorder="little")
                         try:
                             self.packets_per_frame[frame_id] += 1
@@ -148,11 +150,14 @@ class OS1LiDARAgent(AbstractHWAgent):
                             self.packets_per_frame[frame_id] = 1
                         self.blocks_valid += blocks[0]
                         self.blocks_invalid += blocks[1]
-            except:
+            except socket.timeout:
+                pass
+            except Exception:
                 self.logger.exception("")
+        self.stats_are_valid = False
 
     def _pre_capture_file_update(self):
-        if self.state != AgentStatus.CAPTURING:
+        if self.state != AgentStatus.CAPTURING or not self.stats_are_valid:
             return
 
         frames = np.array(list(self.packets_per_frame.keys()))
