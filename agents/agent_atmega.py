@@ -57,10 +57,6 @@ class AtmegaAgent(AbstractHWAgent):
         self.devices_leds[Devices.ROUTER] = LED_DEV_MODEM
 
     def _agent_config(self):
-        """
-        Lee la config específica de hw del agente
-        :return:
-        """
         self.com_port = self.config["com_port"]
         self.baudrate = self.config["baudrate"]
         try:
@@ -69,50 +65,40 @@ class AtmegaAgent(AbstractHWAgent):
         except KeyError:
             self.logger.error(f"Botón {but_name} no está definido en la configuación")
 
-    def _agent_run_data_threads(self):
-        """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        self.__agent_main_thread = Thread(target=self.__main_loop)
-        self.__agent_main_thread.start()
+    def _agent_run_non_hw_threads(self):
         buttons_thread = Thread(target=self.__read_buttons, daemon=True)
         buttons_thread.start()
 
     def _agent_finalize(self):
-        """
-        Se prepara para terminar el agente
-        Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
         try:
             assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
-        self.__agent_main_thread.join(0.2)
+            self.flags.quit.set()
+        self.__thread_main.join(0.2)
         self.ser.close()
 
-    def _agent_connect_hw(self):
-        self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
-        if isinstance(self.ser, serial.Serial) and self.ser.is_open:
-            return True
+    def _agent_hw_start(self):
         try:
+            self.logger.info(f"Abriendo puerto serial '{self.com_port}'. Velocidad = {self.baudrate} bps")
             self.ser = serial.Serial(self.com_port, self.baudrate)
+            self.state = AgentStatus.STAND_BY
+            self.__switch_leds_now(False)
+            self.flags.hw_stopped.clear()
+            self.__thread_main = Thread(target=self.__main_loop)
+            self.__thread_main.start()
             return True
         except (serial.SerialException, serial.SerialTimeoutException):
             self.logger.exception(f"Error al conectarse al puerto {self.com_port}")
             return False
 
-    def _agent_disconnect_hw(self):
+    def _agent_hw_stop(self):
+        self.flags.hw_stopped.set()
+        self.__thread_main.join(0.2)
         self.ser.close()
 
     def __main_loop(self):
-        self.state = AgentStatus.STAND_BY
-        self.__switch_leds_now(False)
-        self.__switch_leds_now(True)
-        self.flags.quit.wait(5)
-        self.__switch_leds_now(False)
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 # Busca encabezado
                 s = self.ser.read(1)

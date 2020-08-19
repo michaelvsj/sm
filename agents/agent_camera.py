@@ -34,54 +34,32 @@ class CameraAgent(AbstractHWAgent):
         self.period = self.config["period"]
         self.dev_file = self.config["dev_file"]
 
-    def _agent_run_data_threads(self):
-        """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        self.__image_cap_thread = Thread(target=self.__capture_image)
-        self.__image_cap_thread.start()
+    def _agent_run_non_hw_threads(self):
+        pass
 
     def _agent_finalize(self):
-        """
-        Se prepara para terminar el agente
-        Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        try:
-            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
-        except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
-        self.__image_cap_thread.join(self.period + 0.5)
+        self.__thread_image_cap.join(self.period + 0.5)
 
-    def _agent_start_capture(self):
-        """
-        Inicia stream de datos desde el sensor
-        """
-        self.state = AgentStatus.CAPTURING
-        
-    def _agent_stop_capture(self):
-        """
-        Detiene el stream de datos desde el sensor
-        """
-        self.state = AgentStatus.STAND_BY
-
-    def _agent_connect_hw(self):
+    def _agent_hw_start(self):
         if check_dev(self.dev_file):
             self.hw_state = HWStates.NOMINAL
+            self.flags.hw_stopped.clear()
+            self.__thread_image_cap = Thread(target=self.__capture_image)
+            self.__thread_image_cap.start()
             return True
         else:
             self.hw_state = HWStates.NOT_CONNECTED
             return False
 
-    def _agent_disconnect_hw(self):
-        pass
+    def _agent_hw_stop(self):
+        self.flags.hw_stopped.set()
+        self.__thread_image_cap.join(1.1)
 
     def _pre_capture_file_update(self):
         pass
 
     def __capture_image(self):
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             if not self.output_folder or not self.state == AgentStatus.CAPTURING or self.hw_state == HWStates.NOT_CONNECTED:
                 time.sleep(0.1)
                 continue

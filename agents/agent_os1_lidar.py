@@ -1,8 +1,6 @@
 import json
 import logging
 import socket
-import time
-from pathlib import Path
 from threading import Thread, Event
 import os
 import errno
@@ -44,25 +42,13 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.blocks_invalid = 0
         self.active_channels = ()
 
-    def _agent_process_manager_message(self, msg):
-        pass
-
     def _agent_config(self):
-        """
-        Lee la config específica de hw del agente
-        :return:
-        """
         self.sensor_ip = self.config["sensor_ip"]
         self.host_ip = self.config["host_ip"]
         self.os1 = OS1(self.sensor_ip, self.host_ip, mode="512x10")
 
-    def _agent_run_data_threads(self):
-        """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        self.sensor_data_receiver = Thread(target=self.__read_from_lidar)
-        self.sensor_data_receiver.start()
+    def _agent_check_hw_connected(self):
+        return check_ping(self.sensor_ip)
 
     def _agent_finalize(self):
         """
@@ -74,13 +60,13 @@ class OS1LiDARAgent(AbstractHWAgent):
             assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
         except AssertionError:
             self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
-        self.sensor_data_receiver.join(0.5)
+        self.__thread_data_receiver.join(0.5)
         self.sock.close()
 
-    def _agent_connect_hw(self):
+    def _agent_hw_start(self):
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(20)
+        self.sock.settimeout(0.1)
         try:
             self.sock.bind((self.host_ip, LIDAR_UDP_PORT))
         except OSError as e:
@@ -110,10 +96,19 @@ class OS1LiDARAgent(AbstractHWAgent):
         self.logger.info("Inicializando LiDAR. Esto tarda unos 20 segundos.")
         self.os1.start()
         self.flags.quit.wait(20)  # TODO: consultar estado hasta que sea "running"
+
+        if not self.flags.quit.is_set():
+            self.flags.hw_stopped.clear()
+            self.__thread_data_receiver = Thread(target=self.__read_from_lidar)
+            self.__thread_data_receiver.start()
+
         return True
 
-    def _agent_disconnect_hw(self):
+    def _agent_hw_stop(self):
         try:
+            self.flags.hw_stopped.set()
+            self.__thread_data_receiver.join(0.5)
+            self.__thread_data_receiver = None
             self.sock.close()
             self.sock = None
         except:
@@ -125,15 +120,14 @@ class OS1LiDARAgent(AbstractHWAgent):
 
         # Al iniciar, se salta el primer lote de paquetes que son los que están en el buffer y son "viejos"
         bytes_recvd = 0
-        while bytes_recvd < os_buffer_size:
+        while bytes_recvd < os_buffer_size and not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 pkt = self.sock.recv(PACKET_SIZE)
                 bytes_recvd += len(pkt)
             except:
-                self.logger.exception("")
+                pass
 
-        self.logger.debug("Inicia bucle principal de __read_from_lidar")
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 packet, address = self.sock.recvfrom(PACKET_SIZE)
                 if not self.state == AgentStatus.CAPTURING:
@@ -156,9 +150,6 @@ class OS1LiDARAgent(AbstractHWAgent):
                         self.blocks_invalid += blocks[1]
             except:
                 self.logger.exception("")
-
-    def _agent_check_hw_connected(self):
-        return check_ping(self.sensor_ip)
 
     def _pre_capture_file_update(self):
         if self.state != AgentStatus.CAPTURING:
@@ -200,6 +191,12 @@ class OS1LiDARAgent(AbstractHWAgent):
             self.hw_state = HWStates.ERROR
         else:
             self.hw_state = HWStates.NOMINAL
+
+    def _agent_process_manager_message(self, msg):
+        pass
+
+    def _agent_run_non_hw_threads(self):
+        pass
 
 
 if __name__ == "__main__":

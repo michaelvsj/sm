@@ -27,48 +27,31 @@ class IMUAgent(AbstractHWAgent):
         self.com_port = ""
         self.ser = None
         self.output_file_header = HEADER
-        self.__flag_stop = Event()
 
     def _agent_process_manager_message(self, msg):
         pass
 
     def _agent_config(self):
-        """
-        Lee la config específica de hw del agente
-        :return:
-        """
         self.com_port = self.config["com_port"]
         self.sample_rate = self.config["sample_rate"]
 
-    def _agent_run_data_threads(self):
-        """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
+    def _agent_run_non_hw_threads(self):
         pass
 
     def _agent_finalize(self):
-        """
-        Se prepara para terminar el agente
-        Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        try:
-            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
-        except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
+        self.flags.quit.set()
         self.__main_thread.join(0.1)
         self.yost_api.disconnect()
         self.yost_api = None
 
-    def _agent_connect_hw(self):
+    def _agent_hw_start(self):
         self.yost_api = Yost3SpaceAPI(self.com_port, self.sample_rate)
         try:
             self.logger.info("Configurando IMU")
             self.yost_api.setup()
             self.logger.info("Iniciando streaming de datos desde IMU")
             self.yost_api.start_streaming()
-            self.__flag_stop.clear()
+            self.flags.hw_stopped.clear()
             self.__main_thread = Thread(target=self.__receive_and_pipe_data)
             self.__main_thread.start()
             return True
@@ -78,14 +61,14 @@ class IMUAgent(AbstractHWAgent):
             self.flags.quit.wait(1)
             return False
 
-    def _agent_disconnect_hw(self):
-        self.__flag_stop.set()
+    def _agent_hw_stop(self):
+        self.flags.hw_stopped.set()
         self.__main_thread.join(0.2)
         self.yost_api.disconnect()
         self.yost_api = None
 
     def __receive_and_pipe_data(self):
-        while not self.flags.quit.is_set() and not self.__flag_stop.is_set():
+        while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 data = self.yost_api.read_datapoint()
                 if data:

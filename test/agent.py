@@ -11,7 +11,7 @@ class TestAgent(AbstractHWAgent):
         AbstractHWAgent.__init__(self, CONFIG_FILE)
         self.output_file_is_binary = False
 
-    def _agent_run_data_threads(self):
+    def _agent_run_non_hw_threads(self):
         """
         Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
         :return:
@@ -37,11 +37,11 @@ class TestAgent(AbstractHWAgent):
         """
         pass
 
-    def _agent_connect_hw(self):
+    def _agent_hw_start(self):
         time.sleep(2)
         return True
 
-    def _agent_disconnect_hw(self):
+    def _agent_hw_stop(self):
         pass
 
 

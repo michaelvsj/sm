@@ -15,15 +15,16 @@ TCP_IP = '127.0.0.1'
 MGR_COMM_BUFFER = 1024
 DEFAULT_CONFIG_FILE = 'config.yaml'
 
+
 class Flags:
     """
     Contiene los eventos relevantes para controlar el flujo
     """
-
     def __init__(self):
         self.start_capture = Event()  # Manager solicita iniciar captura
         self.end_capture = Event()  # Manager solicita detener captura
         self.new_folder = Event()  # Manager pide cambio de directorio
+        self.hw_stopped = Event()  # Para inidicar que HW no está conectado. Se usa para parar los threads de recepción de datos
         self.quit = Event() # Para indicar el fin de la aplicación
 
 
@@ -70,7 +71,7 @@ class AbstractHWAgent(ABC):
 
     def __hw_connect_insist(self):
         while not self.flags.quit.is_set():
-            if self._agent_connect_hw():
+            if self._agent_hw_start():
                 self.hw_state = HWStates.NOMINAL
                 return True
             else:
@@ -227,7 +228,7 @@ class AbstractHWAgent(ABC):
                 wrt.start()
 
             self.logger.info("Iniciando threads de manejo de datos de hardware")
-            self._agent_run_data_threads()
+            self._agent_run_non_hw_threads()
 
             self.logger.info("Iniciando bucle principal")
             while not self.flags.quit.is_set():
@@ -244,7 +245,7 @@ class AbstractHWAgent(ABC):
                     self.logger.error(f"Hardware en estado {self.hw_state}. Se intentará reconexion.")
                     self.state = AgentStatus.STARTING
                     self.logger.info(f"Cambiando estado a {self.state}")
-                    self._agent_disconnect_hw()
+                    self._agent_hw_stop()
                     self.logger.info("Reconectando al hardware")
                     self.__hw_connect_insist()
                     self.state = AgentStatus.STAND_BY
@@ -291,9 +292,9 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def _agent_run_data_threads(self):
+    def _agent_run_non_hw_threads(self):
         """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
+        Levanta los threads demonios (aquellos que corren independiente del estado de conexión al hardware)
         """
         pass
 
@@ -307,7 +308,7 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def _agent_connect_hw(self) -> bool:
+    def _agent_hw_start(self) -> bool:
         """
         El agente debe conectarse al hardware e iniciar su streaming de datos
         Debe salir indicando si la conexión fue exitosa (True) o no (False)
@@ -316,7 +317,12 @@ class AbstractHWAgent(ABC):
         pass
 
     @abstractmethod
-    def _agent_disconnect_hw(self):
+    def _agent_hw_stop(self):
+        """
+        El agente debe terminar los threads de recepción de datos del HW
+        Y desconectarse del mismo
+        :return:
+        """
         pass
 
     @abstractmethod

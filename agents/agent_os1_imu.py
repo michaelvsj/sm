@@ -2,7 +2,6 @@ import errno
 import logging
 import os
 import socket
-from pathlib import Path
 from threading import Thread
 import time
 import sys
@@ -31,40 +30,26 @@ class OS1IMUAgent(AbstractHWAgent):
         pass
 
     def _agent_config(self):
-        """
-        Lee la config específica de hw del agente
-        :return:
-        """
         self.sensor_ip = self.config["sensor_ip"]
         self.host_ip = self.config["host_ip"]
 
-    def _agent_run_data_threads(self):
-        """
-        Levanta los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        self.sensor_data_receiver = Thread(target=self.__read_from_imu)
-        self.sensor_data_receiver.start()
+    def _agent_run_non_hw_threads(self):
+        pass
 
     def _agent_finalize(self):
-        """
-        Se prepara para terminar el agente
-        Termina los threads que reciben data del harwadre, la parsean y la escriben a disco
-        :return:
-        """
-        try:
-            assert (self.flags.quit.is_set())  # Este flag debiera estar seteado en este punto
-        except AssertionError:
-            self.logger.error("Se llamó a hw_finalize() sin estar seteado 'self.flags.quit'")
-        self.sensor_data_receiver.join(0.5)
+        self.flags.quit.set()
+        self.__thread_data_receiver.join(0.5)
         self.sock.close()
 
-    def _agent_connect_hw(self):
+    def _agent_hw_start(self):
         # Socket para recibir datos desde LiDAR
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(20)
+        self.sock.settimeout(0.1)
         try:
             self.sock.bind((self.host_ip, IMU_UDP_PORT))
+            self.flags.hw_stopped.clear()
+            self.__thread_data_receiver = Thread(target=self.__read_from_imu)
+            self.__thread_data_receiver.start()
         except OSError as e:
             if e.errno == errno.EADDRINUSE:
                 self.logger.error(f"Dirección ya está en uso: {self.host_ip}:{IMU_UDP_PORT}")
@@ -73,15 +58,18 @@ class OS1IMUAgent(AbstractHWAgent):
             return False
         return True
 
-    def _agent_disconnect_hw(self):
+    def _agent_hw_stop(self):
         try:
+            self.flags.hw_stopped.set()
+            self.__thread_data_receiver.join(0.2)
+            self.__thread_data_receiver = None
             self.sock.close()
             self.sock = None
         except:
             pass
 
     def __read_from_imu(self):
-        while not self.flags.quit.is_set():
+        while not self.flags.quit.is_set() and not self.flags.hw_stopped.is_set():
             try:
                 packet, address = self.sock.recvfrom(PACKET_SIZE)
                 if not self.state == AgentStatus.CAPTURING:
@@ -93,11 +81,13 @@ class OS1IMUAgent(AbstractHWAgent):
                     self.dq_formatted_data.append(f_data)
             except:
                 pass
+
     def _pre_capture_file_update(self):
         pass
 
     def _agent_check_hw_connected(self):
         return check_ping(self.sensor_ip)
+
 
 if __name__ == "__main__":
     cfg_file = DEFAULT_CONFIG_FILE
