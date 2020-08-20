@@ -65,8 +65,7 @@ agent_data_copy:
   manager_port: 0
   local_port: 30008
   output_file_name:
-  usb_mount_path: '/var/run/usbmount'
-  sync_every: 20
+  usb_mount_path: '/media/mich/USB STICK' #'/var/run/usbmount'
 
 logging:
   version: 1

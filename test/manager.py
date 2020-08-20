@@ -12,7 +12,8 @@ my_socks = {}
 #my_socks["os1_imu"] = {'address':('127.0.0.1', 30002), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 #my_socks["gps"] = {'address':('127.0.0.1', 30003), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 #my_socks["camera"] = {'address':('127.0.0.1', 30004), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
-my_socks["imu"] = {'address': ('127.0.0.1', 30005), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+#my_socks["imu"] = {'address': ('127.0.0.1', 30005), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
+my_socks["data_copy"] = {'address': ('127.0.0.1', 30008), 'socket': socket.socket(socket.AF_INET, socket.SOCK_STREAM)}
 
 for item in my_socks.values():
     item['socket'].setblocking(True)
@@ -39,6 +40,9 @@ for name, item in my_socks.items():
             continue
 
 print("Conectado a todos los agentes")
+if "data_copy" in my_socks.keys():
+    msg = Message.data_msg("dummyDB").serialize()
+    my_socks["data_copy"]["socket"].sendall(msg)
 
 if "gps" in my_socks.keys():
     def gps_reader():

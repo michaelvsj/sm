@@ -4,7 +4,7 @@ use_agents:
   camera: False  # Cámara trasera
   os1_lidar: False   # LiDAR
   os1_imu: False   # IMU interna del LiDAR. Si se habilita, también debe estar habilitado os1_lidar
-  data_copy: False  # Copiador de datos crudos a pendrive
+  data_copy: True  # Copiador de datos crudos a pendrive
   inet: False  # Agente que chequea la conexión a internet
   atmega: False  # I/O de usuario via leds y botones
 capture:

@@ -126,7 +126,7 @@ class FRAICAPManager:
         os.makedirs(self.capture_dir_base, exist_ok=True)
 
         # Objeto para interfaz con base de datos
-        self.dbi = DBInterface(self.mgr_cfg['sqlite']['db_file'])
+        self.dbi = DBInterface(self.mgr_cfg['sqlite']['db_file'], self.logger)
 
     def initialize(self):
         """
@@ -360,7 +360,7 @@ class FRAICAPManager:
             sys.exit(0)
 
         # Informa al agent_data_copy la ubicación de la base de datos
-        self.agents.DATA_COPY.send_msg(Message(Message.DATA, self.mgr_cfg['sqlite']['db_file']))
+        self.agents.DATA_COPY.send_data(self.mgr_cfg['sqlite']['db_file'])
 
         #  Aquí se implementa la lógica de alto nivel de la máquina de estados, basada en estados y eventos
         self.logger.info("Esperando eventos")
@@ -405,7 +405,7 @@ class FRAICAPManager:
                             self.logger.info("Vehículo detenido. Captura en pausa hasta que comience a moverse")
                             self.end_capture()
                             self.change_state(States.WAITING_SPEED)
-                time.sleep(0.001)
+                time.sleep(0.01)
             except KeyboardInterrupt:
                 self.flags.quit.set()
 
@@ -415,4 +415,5 @@ class FRAICAPManager:
                 agt.quit()
         self.logger.info("Enviando mensaje de término a los agentes")
         self.end_agents()
+        time.sleep(1)
         self.logger.info("Aplicación terminada. Que tengas un buen día =)\n\n\n\n\n")

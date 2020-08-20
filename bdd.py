@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sqlite3
 from enum import Enum
-import logging
 import time
 
 DB_TABLE = "tramos"
@@ -9,9 +8,9 @@ DB_TABLE = "tramos"
 
 class DBInterface:
 
-    def __init__(self, db_file):
+    def __init__(self, db_file, logger):
         self.db = db_file
-        self.logger = logging.getLogger("manager")
+        self.logger = logger
 
     def save_capture(self, folio, carpeta, duracion, distancia, lon_ini, lat_ini, lon_fin, lat_fin):
         timestamp = int(time.time())
@@ -59,7 +58,7 @@ class DBInterface:
             return False
 
     def copy_done(self, num_folio):
-        sql = f"UPDATE {DB_TABLE} set copiado = {EstatusDeCopia.COPIED_OK.value} WHERE num_folio = {num_folio}"
+        sql = f"UPDATE {DB_TABLE} set copiado = {EstatusDeCopia.COPIED_OK.value} WHERE num_folio = '{num_folio}'"
         try:
             with sqlite3.connect(self.db) as conn:
                 conn.execute(sql)
