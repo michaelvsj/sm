@@ -16,7 +16,7 @@ def get_time_str():
     return ".".join(f"{p:02d}" for p in ts[3:6])
 
 def get_new_folio(sys_id):
-    return 'A-' + sys_id + "-" + datetime.now().strftime("%y%m%d%H%M%S")
+    return 'A' + sys_id + "-" + datetime.now().strftime("%y%m%d%H%M%S")
 
 class Coords:
     lat: float = 0.0

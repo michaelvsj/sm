@@ -23,6 +23,7 @@ KEY_START_STOP = 's'  # para iniciar o detener una sesión de captura
 FORCE_START = 'f'  # inicia captura inmediatamente, sin esperar que vehículo inice movimiento
 SINGLE_BUTTON = 'bSingleButton'
 
+
 class Flags:
     """
     Contiene los eventos relevantes para controlar el flujo de captura
@@ -117,7 +118,7 @@ class FRAICAPManager:
                 self.logger.error("Error en configuracion. Parámetro 'use_agents' debe ser True o False")
                 continue
             if self.mgr_cfg['use_agents']['os1_imu'] and not self.mgr_cfg['use_agents']['os1_lidar']:
-                self.logger.warning("No es posibel habilitar os1_imu sin habilitar también os1_lidar. Se usarán ambos.")
+                self.logger.warning("No es posible habilitar os1_imu sin habilitar también os1_lidar. Se usarán ambos.")
                 self.mgr_cfg['use_agents']['os1_lidar'] = True
 
         for key in self.mgr_cfg.keys():
@@ -148,23 +149,20 @@ class FRAICAPManager:
             sys.exit(1)
         agents_working_dir = os.path.dirname(os.path.abspath(__file__)) + os.sep + "agents"
         self.logger.info(f"Manager ejecutandose con PID {os.getpid()}")
-        for agt in self.agents.items():
-            if agt.enabled:
-                pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"], stdin=DEVNULL, stdout=DEVNULL, stderr=STDOUT).pid
-                self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
+        for agt in self.get_enabled_agents():
+            pid = Popen([python_exec, f"{agents_working_dir}{os.sep}agent_{agt.name}.py"], stdin=DEVNULL, stdout=DEVNULL, stderr=STDOUT).pid
+            self.logger.info(f"Agente {agt.name} ejecutandose con PID {pid}")
         self.flags.quit.wait(1)  # Les da tiempo para partir antes de intentar conexión
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.connect()
+        for agt in self.get_enabled_agents():
+            agt.connect()
 
         # Espera a que agentes se conecten
         self.logger.info("Esperando conexión a agentes")
-        for agt in self.agents.items():
-            if agt.enabled:
-                self.logger.info(f"Conectando a agente {agt.name}")
-                while not agt.is_connected():
-                    time.sleep(0.01)
-                self.logger.info(f"Agente {agt.name} conectado")
+        for agt in self.get_enabled_agents():
+            self.logger.info(f"Conectando a agente {agt.name}")
+            while not agt.is_connected():
+                self.flags.quit.wait(0.01)
+            self.logger.info(f"Agente {agt.name} conectado")
         self.logger.info("Conectado a todos los agentes habilitados")
 
         self.logger.info("Iniciando thread de reporte de estado de hardware")
@@ -177,13 +175,15 @@ class FRAICAPManager:
         self.flags.critical_agents_ready.wait()
         self.logger.info("Agentes críticos están listos")
 
-        self.logger.info("Iniciando threads generadores de eventos")
-        self.logger.info("--Iniciando thread de lectura de teclado")
+        self.logger.info("Iniciando thread de lectura de teclado")
         Thread(target=self.get_keyboard_input, name="get_keyboard_input", daemon=True).start()
 
         if self.agents.ATMEGA.enabled:
-            self.logger.info("--Iniciando thread de lectura de botones")
+            self.logger.info("Iniciando thread de lectura de botones")
             Thread(target=self.get_buttons, name="get_buttons", daemon=True).start()
+            if self.agents.DATA_COPY.enabled:
+                self.logger.info("Iniciando thread de estado de copia a pendrive")
+                Thread(target=self.check_data_copy, name="check_data_copy", daemon=True).start()
 
         self.logger.info("--Iniciando thread de monitoreo de avance y tiempo")
         Thread(target=self.check_spacetime, name="check_spacetime", daemon=True).start()
@@ -211,14 +211,20 @@ class FRAICAPManager:
             else:
                 self.agents.ATMEGA.send_msg(Message.sys_online())
 
-            for agt in self.agents.items():
-                if agt.enabled:
-                    if agt.is_connected and agt.hw_status != HWStates.NOMINAL:
-                        self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
-                    elif not agt.is_connected():
-                        self.logger.warning(f"Agente {agt.name} desconectado de manager")
+            for agt in self.get_enabled_agents():
+                if agt.is_connected and agt.hw_status != HWStates.NOMINAL:
+                    self.logger.warning(f"Agente {agt.name} reporta hardware en estado {agt.hw_status}")
+                elif not agt.is_connected():
+                    self.logger.warning(f"Agente {agt.name} desconectado de manager")
 
             self.flags.quit.wait(5)
+
+    def check_data_copy(self):
+        while not self.flags.quit.is_set():
+            state = self.agents.DATA_COPY.get_sys_state()
+            if state:
+                self.agents.ATMEGA.send_msg(Message(Message.SYS_STATE, state))
+            self.flags.quit.wait(0.1)
 
     def check_spacetime(self):
         while not self.flags.quit.is_set():
@@ -280,18 +286,9 @@ class FRAICAPManager:
             if k == KEY_QUIT:
                 break
 
-    """
-    def start_capture(self):
-        self.new_segment()
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.send_msg(Message.cmd_start_capture())
-    """
-
     def end_capture(self):
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.send_msg(Message.cmd_end_capture())
+        for agt in self.get_enabled_agents():
+            agt.send_msg(Message.cmd_end_capture())
 
     def new_segment(self):
         self.segment_coords_ini = self.coordinates
@@ -301,15 +298,13 @@ class FRAICAPManager:
         self.segment += 1
         self.capture_dir = self.get_new_capture_folder()
         self.logger.info(f"Nuevo segmento: {self.session}/{self.segment:04d}")
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.send_msg(Message.new_capture(self.capture_dir))
+        for agt in self.get_enabled_agents():
+            agt.send_msg(Message.new_capture(self.capture_dir))
 
     def update_segment_record(self):
         """
         Una vez finalizada la captura del tramo, actualiza el registro con la info de finalización"
         Esto se debe ejecutar ANTES de iniciar el nuevo tramo, ya que ahí se resetean las variables
-        :return:
         """
         self.logger.debug("Actulizando registro de BDD con datos del último tramo")
         duracion = int(time.time() - self.segment_current_init_time)
@@ -335,9 +330,7 @@ class FRAICAPManager:
         return folder
 
     def end_agents(self):
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.send_msg(Message.cmd_quit())
+        [agt.send_msg(Message.cmd_quit()) for agt in self.get_enabled_agents()]
 
     def new_session(self):
         self.session = get_time_str()
@@ -352,6 +345,9 @@ class FRAICAPManager:
             self.agents.ATMEGA.send_msg(Message.capture_paused())
         else:
             self.agents.ATMEGA.send_msg(Message.capture_off())
+
+    def get_enabled_agents(self):
+        return (agt for agt in self.agents.items() if agt.enabled)
 
     def run(self):
         try:
@@ -410,10 +406,9 @@ class FRAICAPManager:
                 self.flags.quit.set()
 
         self.logger.info("Terminando interfaces a agentes")
-        for agt in self.agents.items():
-            if agt.enabled:
-                agt.quit()
+        for agt in self.get_enabled_agents():
+            agt.quit()
         self.logger.info("Enviando mensaje de término a los agentes")
         self.end_agents()
         time.sleep(1)
-        self.logger.info("Aplicación terminada. Que tengas un buen día =)\n\n\n\n\n")
+        self.logger.info("Aplicación terminada. Que tengas un buen día =)\nFIN\n\n\n")

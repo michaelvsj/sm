@@ -18,8 +18,9 @@ class AgentInterface:
         self.__sock.setblocking(True)
         self.__connected = False
         self.q_data_in = SimpleQueue()
-        self.agent_status = AgentStatus.STARTING
-        self.hw_status = HWStates.NOT_CONNECTED
+        self.q_sys_in = SimpleQueue()
+        self.agent_status = ''
+        self.hw_status = ''
         self.enabled = False
         self.logger = logging.getLogger("manager")
 
@@ -76,6 +77,8 @@ class AgentInterface:
                             self.agent_status = msg.arg
                         elif msg.typ == Message.HW_STATE:
                             self.hw_status = msg.arg
+                        elif msg.typ == Message.SYS_STATE:
+                            self.q_sys_in.put(msg.arg)
                         elif msg.typ == Message.DATA:
                             self.q_data_in.put(msg.arg)
                         cmd = b''
@@ -99,6 +102,15 @@ class AgentInterface:
         else:
             if not self.q_data_in.empty():
                 return self.q_data_in.get()
+            else:
+                return None
+
+    def get_sys_state(self, block=False):
+        if block:
+            return self.q_sys_in.get()
+        else:
+            if not self.q_sys_in.empty():
+                return self.q_sys_in.get()
             else:
                 return None
 

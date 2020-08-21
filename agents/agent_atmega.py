@@ -172,6 +172,7 @@ class AtmegaAgent(AbstractHWAgent):
     def _agent_process_manager_message(self, msg: Message):
         #LEDs de estado de sistema
         if msg.typ == Message.SYS_STATE:
+            self.logger.info(f"Mensaje recibido: {msg.typ}:{msg.arg}")
             if msg.arg == Message.SYS_OFFLINE:
                 self.ser.write(START_OF_TEXT + LED_ONLINE + OFF)
                 self.ser.write(START_OF_TEXT + LED_OFFLINE + ON)

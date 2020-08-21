@@ -41,8 +41,8 @@ class AbstractHWAgent(ABC):
         self.config_file = config_file
         self.config_section = config_section
         self.config = dict()
-        self.flag_quit = Event()    #Bandera para avisar que hay que terminar el programa
-        self.dq_formatted_data = deque() #Deque que contiene la data formateada lista para escribir a disco
+        self.flag_quit = Event()    # Bandera para avisar que hay que terminar el programa
+        self.dq_formatted_data = deque()  # Deque que contiene la data formateada lista para escribir a disco
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.local_tcp_port = ''
         self.manager_tcp_port = ''
@@ -64,7 +64,7 @@ class AbstractHWAgent(ABC):
                 else:
                     self.logger.exception("")
                 sys.exit(1)
-            self.__sock.listen(1)
+            self.__sock.listen(0)
             self.__sock.setblocking(True)
         except KeyboardInterrupt:
             sys.exit(0)
@@ -162,6 +162,17 @@ class AbstractHWAgent(ABC):
             except ConnectionResetError:
                 self.__manager_connect()
 
+        # Espera que manager termine la conexión, de lo contrario queda tomado el puerto local por 1.5 minutos
+        try:
+            b = self.connection.recv(1024)
+            while b:
+                b = self.connection.recv(1024)
+        except ConnectionResetError:
+            pass
+        finally:
+            self.connection.close()
+            self.__sock.close()
+
     def __manager_send(self, msg):
         try:
             self.connection.sendall(msg)
@@ -237,21 +248,19 @@ class AbstractHWAgent(ABC):
                 if self.flags.start_capture.is_set():
                     self.flags.start_capture.clear()
                     self.state = AgentStatus.CAPTURING
-                    self.logger.info(f"Cambiando estado a {self.state}")
                 if self.flags.end_capture.is_set():
                     self.flags.end_capture.clear()
                     self.state = AgentStatus.STAND_BY
-                    self.logger.info(f"Cambiando estado a {self.state}")
                 if self.hw_state == HWStates.NOT_CONNECTED or self.hw_state == HWStates.ERROR:
                     self.logger.error(f"Hardware en estado {self.hw_state}. Se intentará reconexion.")
                     self.state = AgentStatus.STARTING
-                    self.logger.info(f"Cambiando estado a {self.state}")
+                    self.logger.debug(f"Cambiando estado a {self.state}")
                     self._agent_hw_stop()
-                    self.logger.info("Reconectando al hardware")
+                    self.logger.debug("Reconectando al hardware")
                     self.__hw_connect_insist()
-                    self.logger.info("Hardware reconectado")
+                    self.logger.debug("Hardware reconectado")
                     self.state = AgentStatus.STAND_BY
-                    self.logger.info(f"Cambiando estado a {self.state}")
+                    self.logger.debug(f"Cambiando estado a {self.state}")
         except KeyboardInterrupt:
             self.logger.info("Señal INT recibida")
         except Exception:
